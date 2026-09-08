@@ -13,24 +13,27 @@
 | `DEFAULT_PASSWORD` | 所有人的初始密碼 | 公告時要求立刻改掉 |
 | `TOKEN_DAYS` | 登入記住幾天 | |
 | `LOGIN_MAX_FAIL`／`LOGIN_LOCK_MIN`／`LOGIN_FAIL_WINDOW_MIN` | 登入鎖定策略 | |
-| `ADMIN_NAMES` | 超級管理者姓名陣列 | 可以是順位裡的人，也可以是 `STAFF_ACCOUNTS` 的名稱 |
+| `ADMIN_NAMES` | 超級管理者姓名陣列 | 預設 `['會務人員']`（管理權跟職務走）；也可以填順位裡的人 |
 | `STAFF_ACCOUNTS` | 不參與排班的帳號 `[{seq, name}]` | 代號用順位用不到的字母（順位由 A 往後） |
 | `DEADLINE_DAY`／`OPEN_DAY` | 每月幾號前完成、幾號公布 | 前端「公布」「完成期限」與逾期警示用 |
 | `MAX_SHIFTS_PER_MONTH` | 每人每月上限 | 超過時警示 |
 | `MAX_CONSECUTIVE_DAYS` | 最多連續幾天 | |
 | `LONG_HOLIDAY_MIN` | 連續幾個可排班日算長連假 | 觸發「前三個月排最多者優先」 |
-| `UI.orgName`／`orgShort`／`systemName` | 組織全名、短名、系統名 | 頁尾、瀏覽器標題 |
+| `UI.orgShort`／`systemName` | 組織短名、系統名 | 瀏覽器標題、頁尾 |
 | `UI.titleDesktop`／`titleMobile` | 頁首標題 | 手機版字要少 |
 | `UI.venueLine` | 頁首第二行 | 醫院與班別時間 |
 | `UI.shifts` | 兩班的名稱與時段 | 數量固定兩班 |
 | `UI.contactShort` | 訊息裡「請洽○○」 | 例：公會窗口、管理者 |
-| `UI.contactLine`／`forgotLine` | 頁尾與登入頁的聯絡方式 | |
+| `UI.contactLine`／`forgotLine` | 頁尾與登入頁的聯絡方式 | 可留空 |
+| `UI.creditHtml` | 頁尾最下面一行（預設是開源專案連結） | 可留空或換成你們的 |
 | `UI.loginScope`／`confidentialNote` | 登入頁一句話、頁尾紅字 | |
 | `UI.rulesTitle`／`rules` | 規則區塊標題與清單 | 純顯示，程式不解析 |
 | `SETUP_ROSTER` | 第一次建表的順位名單 | 已有月份分頁時不用 |
 | `HOLIDAYS` | 週日以外的假日候選 | 全部預設不開放，由管理者在 `_可排班日` 改 |
 
 改完 `Config.gs` 要**重新建版本部署**才會生效（clasp：`push` → `create-version` → `redeploy`）。
+
+**不想重新部署**：頁首標題（電腦版／手機版）、地點行、系統名稱、登入頁兩行說明、頁尾紅字與聯絡方式，這八項可以登入後在「後臺管理 → 頁首頁尾文字」直接改，優先於 `Config.gs`。
 
 ## 可以放心改的地方
 

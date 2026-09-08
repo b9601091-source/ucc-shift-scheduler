@@ -24,7 +24,7 @@
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle(CFG.UI.orgShort + ' ' + CFG.UI.systemName)
+    .setTitle((CFG.UI.orgShort ? CFG.UI.orgShort + ' ' : '') + effectiveUi_().systemName)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
@@ -114,8 +114,53 @@ var PERMS = [
   { k: 'openday', label: '編輯開放日' },
   { k: 'resetpw', label: '使用者密碼重設' },
   { k: 'roster',  label: '增減人員' },
-  { k: 'manage',  label: '代管班表（取消他人的班、代交棒、鎖定期間仍可改）' }
+  { k: 'manage',  label: '代管班表（取消他人的班、代交棒、鎖定期間仍可改）' },
+  { k: 'brand',   label: '頁首頁尾文字' }
 ];
+
+/* ---- 頁首頁尾文字：後臺可改的八項，存 ScriptProperties UI_OVERRIDE，優先於 CFG.UI ---- */
+var UI_KEYS = [
+  { k: 'titleDesktop',     label: '電腦版頁首標題' },
+  { k: 'titleMobile',      label: '手機版頁首標題（字要少）' },
+  { k: 'venueLine',        label: '頁首第二行（地點與班別時間，電腦版）' },
+  { k: 'systemName',       label: '系統名稱（頁尾、瀏覽器標題）' },
+  { k: 'loginScope',       label: '登入框上方一行' },
+  { k: 'forgotLine',       label: '登入頁忘記密碼說明' },
+  { k: 'confidentialNote', label: '頁尾紅字（保密提醒）' },
+  { k: 'contactLine',      label: '頁尾聯絡方式（可留空）' }
+];
+function uiOverride_() {
+  var raw = props_().getProperty('UI_OVERRIDE');
+  if (!raw) return {};
+  try { return JSON.parse(raw) || {}; } catch (e) { return {}; }
+}
+/** 實際要顯示的文字＝Config.gs 的 UI 蓋上後臺改過的值 */
+function effectiveUi_() {
+  var ui = JSON.parse(JSON.stringify(CFG.UI || {})), o = uiOverride_();
+  UI_KEYS.forEach(function (x) { if (typeof o[x.k] === 'string') ui[x.k] = o[x.k]; });
+  return ui;
+}
+function getUiSettings(payload) {
+  var deny = requireAdmin_(payload, 'brand'); if (deny) return deny;
+  var eff = effectiveUi_(), o = uiOverride_();
+  return { ok: true, keys: UI_KEYS, values: UI_KEYS.reduce(function (m, x) { m[x.k] = eff[x.k] || ''; return m; }, {}),
+           overridden: Object.keys(o) };
+}
+/** 整組儲存；跟 Config.gs 一樣的值不存，全部一樣就把覆蓋整個拿掉 */
+function saveUiSettings(payload) {
+  var deny = requireAdmin_(payload, 'brand'); if (deny) return deny;
+  var vals = payload.values || {}, o = {};
+  if (vals.__reset) vals = {};                         // 還原＝什麼都不存
+  UI_KEYS.forEach(function (x) {
+    if (!(x.k in vals)) return;
+    var v = String(vals[x.k] == null ? '' : vals[x.k]).replace(/[<>]/g, '').trim().slice(0, 200);
+    if (v !== String(CFG.UI[x.k] || '')) o[x.k] = v;
+  });
+  if (Object.keys(o).length) props_().setProperty('UI_OVERRIDE', JSON.stringify(o));
+  else props_().deleteProperty('UI_OVERRIDE');
+  log_('修改頁首頁尾文字', '', '', '', actorOf_(payload), Object.keys(o).join('、') || '（全部還原為 Config.gs）');
+  return { ok: true, msg: Object.keys(o).length ? '已儲存，大家重新整理後生效' : '已還原為 Config.gs 的設定', ui: effectiveUi_() };
+}
 
 function isAdminUser_(name) { return !!name && CFG.ADMIN_NAMES.indexOf(name) >= 0; }
 
@@ -610,8 +655,9 @@ function getBootstrap() {
       maxFail: CFG.LOGIN_MAX_FAIL,
       lockMin: CFG.LOGIN_LOCK_MIN
     },
-    // 畫面上所有組織專屬的文字（頁首、規則、頁尾、聯絡方式）都從 Config.gs 帶給前端
-    ui: CFG.UI
+    // 畫面上所有組織專屬的文字（頁首、規則、頁尾、聯絡方式）都從 Config.gs 帶給前端，
+    // 後臺「頁首頁尾文字」改過的值優先
+    ui: effectiveUi_()
   };
   // 預設顯示「次月」：每月 5 號公布次月班表，打開網頁十之八九就是要看次月，少一次點選
   var t = todayIso_();

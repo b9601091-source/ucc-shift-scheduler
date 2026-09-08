@@ -31,16 +31,17 @@ Google Apps Script 網頁應用程式：讓一群人依順位輪流填班，資�
    - **順位面板與月曆在同一列，絕不能 `deleteRow`／`insertRow`**
 3. **規則檢核是軟提示。** 前端 `checkRules()` 只產生警示文字，使用者確認後仍可送出。後端唯一硬擋的是「格子已被填走」「該格不開放」（資料完整性）與「鎖定期間非授權者不能改」。
 4. **組織專屬字串不進 `Code.gs`／`Index.html`。** 任何顯示給使用者的組織名、地點、聯絡方式、規則文字都走 `CFG.UI`，經 `getBootstrap()` 的 `ui` 欄位送到前端由 `applyUi()` 填入。
+   其中 `UI_KEYS` 列的八項可由後臺「頁首頁尾文字」覆蓋（ScriptProperties `UI_OVERRIDE`，`effectiveUi_()` 合併）；新增可覆蓋欄位就加進 `UI_KEYS`。
 5. **`google.script.run` 不接受 `undefined` 參數**。沒有參數的函式用 `run[fn]()` 呼叫（見 `api()`）。
 6. 完整姓名不出現在未登入的頁面：`getBootstrap()` 只送代號＋遮罩姓名。
 7. 每次寫入試算表的動作都要 `log_()`；多人可能同時寫的動作要包 `LockService`。
 
 ## 權限模型（v3.9）
 
-- `CFG.ADMIN_NAMES`：超級管理者。全部功能＋唯一能「授權」的人。
+- `CFG.ADMIN_NAMES`：超級管理者。全部功能＋唯一能「授權」的人。範本預設是會務人員帳號（管理權跟職務不跟人）。
 - `CFG.STAFF_ACCOUNTS`：不參與排班的帳號。能看、能被授權、不能填班／交棒（`isReadOnly_`）。
 - 其他人的後臺功能由 `perm_<姓名>`（ScriptProperties，JSON 陣列）決定；鍵在 `PERMS` 常數：
-  `lock`、`notes`、`skip`、`create`、`openday`、`resetpw`、`roster`、`manage`。
+  `lock`、`notes`、`skip`、`create`、`openday`、`resetpw`、`roster`、`manage`、`brand`。
 - 後端每個後臺函式用 `requireAdmin_(payload, '<鍵>')` 守門；`manage` 另外控制取消他人的班、代交棒、鎖定期間仍可改。
 - 前端 `#admCard details.sub[data-perm]` 依 `viewer.perms` 顯示；`grant` 分項只給 `viewer.isSuper`。
 - **加新的後臺功能時**：在 `PERMS` 加一鍵、後端函式帶該鍵、前端分項加 `data-perm`。三處缺一不可。

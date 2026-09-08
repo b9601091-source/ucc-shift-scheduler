@@ -23,8 +23,9 @@ var CFG = {
   LOGIN_FAIL_WINDOW_MIN: 10,   // 超過幾分鐘沒再錯就把次數歸零
 
   // 超級管理者：擁有全部後臺功能，而且只有他們能把個別功能「授權」給別人。
-  // 填順位表裡的姓名，或下面 STAFF_ACCOUNTS 的名稱都可以（例如讓會務人員當超級管理者）。
-  ADMIN_NAMES: ['王小明'],
+  // 填順位表裡的姓名，或下面 STAFF_ACCOUNTS 的名稱都可以。預設是會務人員帳號：
+  // 管理權跟著職務走、不跟著某位排班的人走，交接時不必改程式。⚠️ 部署後請立刻替這個帳號改密碼。
+  ADMIN_NAMES: ['會務人員'],
 
   // 不參與排班的帳號（會務人員、幹事…）：有自己的密碼、可以查看所有班表，
   // 但不能填班／交棒。要讓他們管理後臺，登入超級管理者用「權限授權」勾給他。
@@ -40,9 +41,10 @@ var CFG = {
   MAX_CONSECUTIVE_DAYS: 3,     // 最多連續排班幾日（勞基法：不得連續 4 日以上）
   LONG_HOLIDAY_MIN: 4,         // 連續幾個可排班日以上算「長連假」（觸發優先權規則）
 
-  /* ---------- 畫面上的文字（全部可改） ---------- */
+  /* ---------- 畫面上的文字（全部可改） ----------
+   * 其中 titleDesktop／titleMobile／venueLine／systemName／loginScope／forgotLine／confidentialNote／contactLine
+   * 八項也可以由有「頁首頁尾文字」權限的人在後臺直接改，後臺改的值優先於這裡（不必重新部署）。 */
   UI: {
-    orgName: '社團法人○○市藥師公會',            // 頁尾與電腦版頁首用的全名
     orgShort: '○○藥師公會',                      // 瀏覽器分頁標題用的短名
     systemName: '假日急診排班系統',               // 系統名稱
     titleDesktop: '社團法人○○市藥師公會　假日急診排班系統',   // 電腦版頁首標題
@@ -53,10 +55,11 @@ var CFG = {
       pm: { label: '晚班', hours: '1600~2400' }
     },
     contactShort: '公會窗口',                      // 各種訊息裡「請洽○○」的稱呼
-    contactLine: '排班規則或班表異動請洽公會窗口　(0X)XXXX-XXXX　○○○ 幹事',   // 頁尾聯絡方式
-    forgotLine: '忘記密碼請洽公會窗口 (0X)XXXX-XXXX ○○○ 幹事重設。',            // 登入頁的忘記密碼說明
+    contactLine: '排班規則或班表異動請洽公會窗口',   // 頁尾最後一行（可留空）
+    forgotLine: '忘記密碼請洽公會窗口重設。',          // 登入頁的忘記密碼說明
     loginScope: '本系統為公會內部使用，僅限排班藥師。',                            // 登入框上方一行
     confidentialNote: '本系統為公會內部使用，內容請勿外傳或截圖分享',              // 頁尾紅字
+    creditHtml: '開源專案：<a href="https://github.com/b9601091-source/ucc-shift-scheduler" target="_blank" rel="noopener">GitHub</a>',   // 頁尾最下面一行（可留空）
     rulesTitle: '排班規則摘要',                                                    // 規則區塊標題
     rules: [                                       // 規則清單，一項一行，顯示在班表下方（純說明，程式不解析）
       '順位採輪替制，每月順位依序向前遞補一位。',

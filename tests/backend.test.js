@@ -19,7 +19,7 @@ const p10 = C.parseSheet_('115/10');
 ok(p10.days.filter(d => d.inMonth).length === 31 && p10.days.filter(d => d.open).length === 4, '115/10：31 天、週日 4 天開放');
 ok(p10.order.map(o => o.seq + o.name).join() === 'A王小明,B陳小美,C林小華' && p10.notesRow === 3 && p10.notesCol === 14, '順位面板與注意事項錨點');
 const b = C.getBootstrap();
-ok(b.ui && b.ui.orgName && b.rules.maxFail === 10, 'bootstrap 帶 ui 與 maxFail');
+ok(b.ui && b.ui.titleDesktop && b.rules.maxFail === 10, 'bootstrap 帶 ui 與 maxFail');
 ok(b.roster.map(r => r.label).join() === 'Ａ．王○明,Ｂ．陳○美,Ｃ．林○華,Ｚ．會務人員', '登入下拉遮罩、會務人員不遮', b.roster.map(r => r.label));
 
 console.log('\n=== 登入與身分');
@@ -52,8 +52,19 @@ ok(C.clearLock({ token: tZ.token }).ok && !C.lockState_().locked, 'Z 可解鎖')
 const au = C.adminUsers({ token: tZ.token });
 ok(au.ok && !au.isSuper && au.rows.length === 4 && au.rows[0].perms === undefined, 'Z（roster 權限）能看名單但看不到授權欄');
 const auB = C.adminUsers({ token: tB.token });
-ok(auB.isSuper && auB.keys.length === 8 && auB.rows.find(r => r.name === '會務人員').perms.join() === 'lock,roster', 'B 看得到授權欄與 8 個鍵');
+ok(auB.isSuper && auB.keys.length === 9 && auB.rows.find(r => r.name === '會務人員').perms.join() === 'lock,roster', 'B 看得到授權欄與 9 個鍵');
 ok(!C.adminUsers({ token: tA.token }).ok, 'A 不能看名單');
+
+console.log('\n=== 頁首頁尾文字');
+ok(!C.getUiSettings({ token: tZ.token }).ok, 'Z 無 brand 權限');
+const u0 = C.getUiSettings({ token: tB.token });
+ok(u0.ok && u0.keys.length === 8 && u0.values.titleDesktop === C.CFG.UI.titleDesktop && u0.overridden.length === 0, '超管讀到 8 欄、尚無覆蓋');
+const u1 = C.saveUiSettings({ token: tB.token, values: { titleDesktop: '測試公會　排班', titleMobile: '<b>x</b> 排班', contactLine: '' } });
+ok(u1.ok && u1.ui.titleDesktop === '測試公會　排班' && u1.ui.titleMobile === 'b x /b 排班'.replace('b x /b', 'bx/b') === false || u1.ui.titleMobile.indexOf('<') < 0, '儲存覆蓋、去掉尖括號', u1.ui.titleMobile);
+ok(u1.ui.contactLine === '' && C.getBootstrap().ui.titleDesktop === '測試公會　排班', '空字串可存、bootstrap 帶覆蓋值');
+ok(JSON.parse(C.__props['UI_OVERRIDE']).systemName === undefined, '沒改的欄位不存');
+const u2 = C.saveUiSettings({ token: tB.token, values: { __reset: true } });
+ok(u2.ok && !('UI_OVERRIDE' in C.__props) && u2.ui.titleDesktop === C.CFG.UI.titleDesktop, '還原＝刪掉覆蓋');
 
 console.log('\n=== 交棒與代管');
 ok(!C.setDone({ token: tZ.token, month: '115/10', name: '王小明', done: true }).ok, 'Z 不能交棒');

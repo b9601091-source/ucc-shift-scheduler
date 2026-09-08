@@ -45,6 +45,8 @@
   .permgrid label{display:flex;align-items:flex-start;gap:6px;cursor:pointer;line-height:1.4}
   .permgrid input{margin-top:3px}
   input.txt{font:inherit;font-size:15px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .brandform label{display:block;font-size:12.5px;color:var(--sub);margin:8px 0 3px}
+  .brandform input{width:100%;box-sizing:border-box}
   .picker{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
   .picker label{display:block;font-size:11.5px;opacity:.85;margin-bottom:2px}
   select,input[type=password],input[type=number],textarea{font:inherit;font-size:15px;padding:7px 10px;
@@ -341,7 +343,7 @@
 <div class="wrap">
   <div id="demoBar" class="demo" style="display:none">
     🔧 <b>離線示範版</b>：姓名皆為<b>暱稱</b>、班表為<b>虛構資料</b>，沒有後端也不連任何服務。
-    可自由點選試用，重新整理即還原。示範帳號密碼一律 <b>0000</b>；<b>Ｂ．陳○美</b> 是超級管理者（全部後臺功能），
+    可自由點選試用，重新整理即還原。示範帳號密碼一律 <b>0000</b>；<b>Ｂ．陳○美</b> 是超級管理者（全部後臺功能，含頁首頁尾文字編輯），
     <b>Ｚ．會務人員</b> 已被授權「班表鎖定」。
   </div>
 
@@ -501,6 +503,16 @@
                 該員若還有班要先取消。加入後請通知本人用預設密碼登入。</div>
             </div></details>
 
+            <details class="sub" data-perm="brand"><summary>頁首頁尾文字</summary><div class="subbody">
+              <div class="brandform" id="brandForm">—</div>
+              <div class="row" style="margin-top:9px">
+                <button class="btn" id="btnBrandSave">儲存</button>
+                <button class="btn ghost" id="btnBrandReset">還原成 Config.gs 的值</button>
+              </div>
+              <div class="hint">改的是顯示文字：頁首標題（電腦版／手機版分開）、登入頁說明、頁尾。
+                存在系統設定裡、優先於 Config.gs；儲存後所有人重新整理即生效。</div>
+            </div></details>
+
             <details class="sub" data-perm="grant"><summary>權限授權</summary><div class="subbody">
               <div class="row">
                 <select id="permUser"></select>
@@ -520,10 +532,10 @@
   </div>
 
   <div class="pfoot">
-    <span id="ftOrg"></span>　<span id="ftSys">排班系統</span>　<b>v3.9 離線示範版</b><br>
+    <span id="ftSys">排班系統</span>　<b>v3.9 離線示範版</b><br>
     <span class="warn2" id="ftConf"></span><br>
     <a id="lnkLog">更新紀錄</a>　·　最後更新 <span id="lastUpd">—</span><br>
-    <span id="ftContact"></span>
+    <span id="ftContact"></span><span id="ftCredit"></span>
   </div>
 </div>
 
@@ -555,9 +567,9 @@ function api(fn, arg){
 /* 全部在瀏覽器記憶體裡跑，沒有任何連線。姓名皆為暱稱、班表為虛構資料。 */
 var DEMO = (function(){
   var UI = {
-  "orgName": "○○藥師公會",
   "orgShort": "○○藥師公會",
   "systemName": "假日急診排班系統",
+  "creditHtml": "開源專案：<a href=\"https://github.com/b9601091-source/ucc-shift-scheduler\" target=\"_blank\" rel=\"noopener\">GitHub</a>",
   "titleDesktop": "○○藥師公會　假日急診排班系統",
   "titleMobile": "藥師 假日排班",
   "venueLine": "○○醫院　早班 08:00–16:00／晚班 16:00–24:00",
@@ -594,8 +606,16 @@ var DEMO = (function(){
     { k: 'lock',    label: '班表鎖定' }, { k: 'notes',   label: '編輯注意事項' },
     { k: 'skip',    label: '標記逾期放棄' }, { k: 'create',  label: '建立月份分頁' },
     { k: 'openday', label: '編輯開放日' }, { k: 'resetpw', label: '使用者密碼重設' },
-    { k: 'roster',  label: '增減人員' }, { k: 'manage',  label: '代管班表（取消他人的班、代交棒、鎖定期間仍可改）' }
+    { k: 'roster',  label: '增減人員' }, { k: 'manage',  label: '代管班表（取消他人的班、代交棒、鎖定期間仍可改）' },
+    { k: 'brand',   label: '頁首頁尾文字' }
   ];
+  var UI_KEYS = [
+    { k: 'titleDesktop', label: '電腦版頁首標題' }, { k: 'titleMobile', label: '手機版頁首標題（字要少）' },
+    { k: 'venueLine', label: '頁首第二行（地點與班別時間，電腦版）' }, { k: 'systemName', label: '系統名稱（頁尾、瀏覽器標題）' },
+    { k: 'loginScope', label: '登入框上方一行' }, { k: 'forgotLine', label: '登入頁忘記密碼說明' },
+    { k: 'confidentialNote', label: '頁尾紅字（保密提醒）' }, { k: 'contactLine', label: '頁尾聯絡方式（可留空）' }
+  ];
+  var UI0 = JSON.parse(JSON.stringify(UI));
   // 一律用「王小明」式的通用假名：三個字才看得出遮罩效果（王○明），且一眼就知道不是真人
   var NICK = ['王小明','陳小美','林小華','張小芳','李小強','黃小婷','吳小豪','劉小君',
               '蔡小翰','鄭小怡','謝小宏','許小薇','洪小家','曾小芬','周小志','賴小玲'];
@@ -842,6 +862,18 @@ var DEMO = (function(){
       delete pw[name]; delete grants[name];
       return {ok:true, msg:'已將 '+name+' 移出順位：'+months.join('、')+'。歷史月份的紀錄不受影響'};
     },
+    getUiSettings: function(p){
+      var d = deny(p.token,'brand'); if(d) return d;
+      var vals={}; UI_KEYS.forEach(function(x){ vals[x.k]=UI[x.k]||''; });
+      return { ok:true, keys:UI_KEYS, values:vals, overridden: UI_KEYS.filter(function(x){ return UI[x.k]!==UI0[x.k]; }).map(function(x){ return x.k; }) };
+    },
+    saveUiSettings: function(p){
+      var d = deny(p.token,'brand'); if(d) return d;
+      var vals = p.values||{};
+      if(vals.__reset){ UI_KEYS.forEach(function(x){ UI[x.k]=UI0[x.k]; }); return { ok:true, msg:'已還原為設定檔的值（示範）', ui:UI }; }
+      UI_KEYS.forEach(function(x){ if(x.k in vals) UI[x.k]=String(vals[x.k]||'').replace(/[<>]/g,'').trim().slice(0,200); });
+      return { ok:true, msg:'已儲存（示範：重新整理即還原）', ui:UI };
+    },
     createNextMonth: function(p){ var d=deny(p.token,'create'); if(d) return d;
       return {ok:false, msg:'示範版不支援建立分頁'}; },
     createMonthsThrough: function(p){ var d=deny(p.token,'create'); if(d) return d;
@@ -862,7 +894,7 @@ function applyUi(ui){
   if(!ui) return;
   S.ui = ui;
   var r = (S.boot && S.boot.rules) || {};
-  try{ document.title = (ui.orgShort||'') + ' ' + (ui.systemName||''); }catch(e){}
+  try{ document.title = ((ui.orgShort ? ui.orgShort+' ' : '') + (ui.systemName||'排班系統')).trim(); }catch(e){}
   $('h1').innerHTML = '<span class="donly">'+ui.titleDesktop+'</span><span class="mobonly">'+ui.titleMobile+'</span>';
   $('venueLine').textContent = ui.venueLine || '';
   $('loginScope').textContent = ui.loginScope || '';
@@ -872,16 +904,38 @@ function applyUi(ui){
     (ui.forgotLine||'');
   $('rulesTitle').textContent = ui.rulesTitle || '排班規則摘要';
   $('rulesList').innerHTML = (ui.rules||[]).map(function(x){ return '<li>'+x+'</li>'; }).join('');
-  $('ftOrg').textContent = ui.orgName || '';
   $('ftSys').textContent = ui.systemName || '排班系統';
   $('ftConf').textContent = ui.confidentialNote || '';
   $('ftContact').textContent = ui.contactLine || '';
+  $('ftCredit').innerHTML = ui.creditHtml ? (ui.contactLine ? '<br>' : '') + ui.creditHtml : '';
+}
+
+/* 後臺「頁首頁尾文字」 */
+function loadBrand(){
+  api('getUiSettings', {token:S.token}).then(function(r){
+    if(!r || !r.ok){ if(r&&r.needLogin){ showLogin(r.msg); return; } toast(r&&r.msg?r.msg:'讀取失敗'); return; }
+    $('brandForm').innerHTML = r.keys.map(function(k){
+      return '<label>'+k.label+'</label><input class="txt" data-k="'+k.k+'" maxlength="200" value="'+
+             String(r.values[k.k]||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'">'; }).join('');
+  }).catch(function(e){ toast('連線失敗：'+(e&&e.message?e.message:e)); });
+}
+function brandValues(){
+  var o={}, els=$('brandForm').querySelectorAll('input[data-k]');
+  for(var i=0;i<els.length;i++) o[els[i].getAttribute('data-k')]=els[i].value;
+  return o;
+}
+function saveBrand(vals, okMsg){
+  busy(true);
+  api('saveUiSettings', {token:S.token, values:vals}).then(function(r){
+    busy(false); toast(r&&r.msg?r.msg:okMsg);
+    if(r&&r.ok&&r.ui){ if(S.boot) S.boot.ui=r.ui; applyUi(r.ui); loadBrand(); }
+  }).catch(function(e){ busy(false); toast('連線失敗：'+(e&&e.message?e.message:e)); });
 }
 
 /* 更新紀錄：同一天彙整成一則，新的放最前面 */
 var CHANGELOG = [
-  {d:'2026/09/08', v:'v3.9', t:'權限授權與增減人員',
-   s:'後臺新增「權限授權」（把個別後臺功能開放給指定帳號，含會務人員）與「增減人員」（網頁上直接增刪順位藥師）；組織設定抽成獨立的 Config.gs。'},
+  {d:'2026/09/08', v:'v3.9', t:'權限授權、增減人員、頁首頁尾可編輯',
+   s:'後臺新增「權限授權」（逐項開放後臺功能給指定帳號）、「增減人員」（網頁上直接增刪順位）、「頁首頁尾文字」（標題與說明文字後臺可改）；超級管理者移交會務人員帳號；組織設定抽成 Config.gs 並開源。'},
   {d:'2026/09/07', v:'v3.8', t:'個人密碼登入與後臺管理',
    s:'新增個人密碼登入（代號登入、可自行修改）與唯讀的會務人員帳號；後臺管理改為僅管理者可見、各功能分項收折，並新增班表鎖定；月份切換移到班表標題列，頁首置頂。'},
   {d:'2026/08/12', v:'v1.0', t:'排班網頁上線',
@@ -1555,6 +1609,7 @@ $('btnReload').onclick=function(){ loadMonth(S.month); };
   for(var i=0;i<subs.length;i++){
     var k=subs[i].getAttribute('data-perm');
     if(k==='roster'||k==='grant') subs[i].addEventListener('toggle', function(){ if(this.open) loadUsers(); });
+    if(k==='brand') subs[i].addEventListener('toggle', function(){ if(this.open) loadBrand(); });
   }
 })();
 $('btnRosterAdd').onclick=function(){
@@ -1581,6 +1636,14 @@ $('rosterList').onclick=function(e){
       }).catch(function(e){ busy(false); toast('連線失敗：'+(e&&e.message?e.message:e)); });
     });
 };
+$('btnBrandSave').onclick=function(){ saveBrand(brandValues(), '已儲存'); };
+$('btnBrandReset').onclick=function(){
+  modal('還原頁首頁尾文字', '<p>把八項文字全部還原成 Config.gs 裡的值。</p>', '確定還原', function(){
+    var o={}; var els=$('brandForm').querySelectorAll('input[data-k]');
+    for(var i=0;i<els.length;i++) o[els[i].getAttribute('data-k')]='';
+    // 送空字串＝與 Config.gs 不同時仍會被存成空白，所以改送「不含該鍵」以外的做法：直接請後端刪除
+    saveBrand({__reset:true}, '已還原');
+  }); };
 $('permUser').onchange=renderPermBoxes;
 $('btnPermSave').onclick=function(){
   var n=$('permUser').value; if(!n){ toast('請先選人'); return; }

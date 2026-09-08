@@ -43,6 +43,7 @@ Google 試算表 ＋ ScriptProperties
 | token 簽章金鑰 `AUTH_SECRET` | ScriptProperties | 第一次執行隨機產生 |
 | 鎖定狀態 `LOCK` | ScriptProperties | 不需要排程：每次讀取時判斷是否到期 |
 | 授權表 `perm_<姓名>` | ScriptProperties | 同上 |
+| 頁首頁尾文字覆蓋 `UI_OVERRIDE` | ScriptProperties | 後臺改文字不必重新部署；`effectiveUi_()` 合併到 `CFG.UI` 上 |
 | 登入失敗計數 `fail_<姓名>` | ScriptProperties | 暴力猜密碼防護 |
 | 前三個月排班次數 `pc_<月份>` | CacheService（5 分鐘） | 要多讀三個分頁，是最慢的查詢 |
 
@@ -78,7 +79,7 @@ J～L 欄順位面板（J3「排序」）、N2「當月班表填寫注意事項�
 - 登入成功發 HMAC-SHA256 簽章的無狀態 token（姓名｜到期時間｜簽章），存瀏覽器 localStorage，30 天。
 - 每個寫入 API 都帶 token；後端用 `actorOf_()` 解出操作者，代填時紀錄寫「代填（操作者 ○○○）」。
 - 連續錯 10 次鎖 10 分鐘（按帳號計）；超過 10 分鐘沒再錯就歸零。
-- 權限兩層：`ADMIN_NAMES` 超級管理者全功能＋可授權；其他帳號逐項授權（8 個鍵）。前後端都檢查，前端只是顯示與否。
+- 權限兩層：`ADMIN_NAMES` 超級管理者全功能＋可授權；其他帳號逐項授權（9 個鍵）。前後端都檢查，前端只是顯示與否。
 
 ## 並行與效能
 
