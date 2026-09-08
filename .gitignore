@@ -1,0 +1,8 @@
+# clasp 的專案識別碼是每個組織自己的，不要進版本庫
+.clasp.json
+# 本機備份與雜物
+舊版/
+*.bak
+node_modules/
+.DS_Store
+Thumbs.db

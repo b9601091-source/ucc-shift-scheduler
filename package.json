@@ -1,0 +1,12 @@
+{
+  "name": "ucc-shift-scheduler",
+  "version": "3.9.0",
+  "private": true,
+  "description": "順位輪流填班的網頁（Google Apps Script ＋ 現有 Google 試算表）",
+  "scripts": {
+    "test": "node tests/backend.test.js && node tests/frontend.test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  }
+}

@@ -1,0 +1,1716 @@
+<!-- UCC 排班系統【離線示範版】v3.9
+     ★ 這份是給外部分享看架構用的：姓名全部是暱稱、班表是假資料、沒有後端也不連任何服務。
+       雙擊即可開啟；改動只存在瀏覽器記憶體，重新整理就復原。正式版請用 Index.html。
+     版面比照原試算表：左邊月曆（每週三列：日期／早班／晚班）＋右邊排班順位面板
+     ★ 組織名稱、規則、聯絡方式等文字全部由 Config.gs 經 getBootstrap 帶入，此檔不含組織專屬內容。
+     ★ 這一份是要貼進 Apps Script 的上線版，直接開檔不會有資料。離線展示請用「離線示範版.html」 -->
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>排班系統</title>
+</head>
+<body>
+<style>
+  :root{
+    --ink:#1c2430; --sub:#5a6675; --line:#dcE2e8; --bg:#eef1f4; --card:#fff;
+    --brand:#0f6e8c; --brand-d:#0b566d; --brand-l:#e4f0f5;
+    --ok:#1f7a4d; --ok-bg:#e3f5ea; --ok-bd:#8fcaa8;
+    --turn:#b5661a; --turn-bg:#fff3e0; --turn-bd:#e29341;
+    --wait-bg:#fff; --warn:#a8620a; --warn-l:#fdf3e3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif;
+       background:var(--bg);color:var(--ink);font-size:16px;line-height:1.55}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 12px 60px}
+  /* 頁首釘在最上面不跟著捲，電腦版與手機版都是 */
+  header{background:var(--brand);color:#fff;padding:12px 0 14px;
+         position:sticky;top:0;z-index:40;box-shadow:0 2px 8px rgba(12,40,55,.18)}
+  header .wrap{padding-bottom:0}
+  h1{font-size:18px;margin:0;font-weight:700;letter-spacing:.5px}
+  .sub{font-size:12.5px;opacity:.85;margin-top:1px}
+  /* 電腦版：標題與月份/姓名選單同一行；手機版才換行堆疊 */
+  .hdr{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap}
+  .mosp{display:none}          /* 只有手機版需要這個空格 */
+  .mobonly{display:none}       /* 手機版才顯示（短版標題） */
+  .rlist{display:flex;flex-direction:column;gap:4px;font-size:13.5px}
+  .rlist .rrow{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;background:#f5f7f9}
+  .rlist .rrow .rseq{font-weight:700;width:1.4em;text-align:center}
+  .rlist .rrow .rnm{flex:1}
+  .rlist .rrow .rtag{font-size:11px;color:var(--sub)}
+  .rlist .rrow button{font-size:12px;padding:3px 9px}
+  .permgrid{display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;margin-top:8px;font-size:13.5px}
+  .permgrid label{display:flex;align-items:flex-start;gap:6px;cursor:pointer;line-height:1.4}
+  .permgrid input{margin-top:3px}
+  input.txt{font:inherit;font-size:15px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .picker{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .picker label{display:block;font-size:11.5px;opacity:.85;margin-bottom:2px}
+  select,input[type=password],input[type=number],textarea{font:inherit;font-size:15px;padding:7px 10px;
+       border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);min-width:140px}
+  select#selName{font-weight:700}
+  select#selName.need{box-shadow:0 0 0 3px #ffd88a;border-color:#e29341}
+
+  /* ---- 提示橫幅：一眼看出現在該做什麼 ---- */
+  .banner{margin:14px 0 12px;border-radius:10px;padding:12px 16px;display:flex;
+          gap:14px;align-items:center;flex-wrap:wrap;font-size:15px;background:#fff;
+          border:1px solid var(--line);border-left:6px solid var(--line)}
+  .banner.you{background:var(--turn-bg);border-color:var(--turn-bd);border-left-color:var(--turn)}
+  .banner.done{background:var(--ok-bg);border-color:var(--ok-bd);border-left-color:var(--ok)}
+  .banner.err{background:#fdecea;border-color:#e2a09a;border-left-color:#b3261e;color:#8c1d18}
+  .banner.err code{background:#fff;padding:1px 5px;border-radius:4px;font-size:12.5px;color:#b3261e}
+  .banner b{font-size:16px}
+  .banner .push{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .meta{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin:-4px 0 12px 4px}
+  .meta b{color:var(--ink)}
+
+  .main{display:grid;grid-template-columns:1fr 268px;gap:12px;align-items:start}
+  .main.topgap{margin-top:14px}
+  .col-cal{grid-column:1;grid-row:1}
+  .col-side{grid-column:2;grid-row:1/span 2}
+  .col-rest{grid-column:1;grid-row:2}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+  .card h2{font-size:14px;margin:0 0 10px;color:var(--brand-d);
+           display:flex;align-items:center;gap:8px;justify-content:space-between}
+
+  /* ---- 月曆：完全比照試算表的三列一週 ---- */
+  table.sheet{width:100%;border-collapse:collapse;table-layout:fixed}
+  table.sheet th{font-size:12px;color:#fff;background:var(--brand);padding:5px 0;font-weight:600;
+                 border:1px solid var(--brand)}
+  table.sheet th.corner{background:var(--brand-d);border-color:var(--brand-d)}
+  table.sheet td{border:1px solid var(--line);padding:2px;text-align:center;vertical-align:middle}
+  col.labcol{width:78px}
+  tr.dates td{background:#f7f9fa;font-size:12px;color:var(--sub);height:24px;font-weight:600}
+  tr.dates td.today{background:#fff0c9;color:#8a5a00}
+  tr.dates td.hol{color:#b3261e}
+  tr.dates td .lh{display:inline-block;background:var(--warn-l);color:var(--warn);
+                  border-radius:3px;font-size:10px;padding:0 3px;margin-left:3px;font-weight:700}
+  td.lab{background:#eef2f5;font-size:11px;color:var(--sub);line-height:1.3;font-weight:700}
+  td.lab small{display:block;font-weight:400;opacity:.8;font-size:10px}
+  tr.shift td{height:42px}
+  td.closed{background:#f1f3f5;color:#c3c9d0;font-size:13px}
+  td.blank{background:#fbfcfd}
+
+  .slot{display:flex;align-items:center;justify-content:center;width:100%;height:36px;
+        font:inherit;font-size:14px;border-radius:6px;cursor:pointer;border:1px dashed #c8d2da;
+        background:#fff;color:#aab4bd}
+  .slot:hover{border-color:var(--brand);background:var(--brand-l);color:var(--brand-d)}
+  .slot.empty::after{content:'＋'}
+  .slot.empty:hover::after{content:attr(data-me);font-size:14px;font-weight:600;opacity:.75}
+  .slot.taken{border:1px solid var(--brand);background:var(--brand-l);
+              color:var(--brand-d);font-weight:700;cursor:default}
+  .slot.mine{border:2px solid var(--ok);background:var(--ok-bg);color:var(--ok);font-weight:700}
+  .slot.mine::after{content:'✕';margin-left:6px;font-size:12px;font-weight:400;opacity:.65}
+  .slot:disabled{cursor:default}
+  .slotx{display:flex;align-items:center;justify-content:center;height:42px;border-radius:6px;
+         background:#f1f3f5;color:#c3c9d0;font-size:13px}
+  /* 編輯開放日模式：格子變成開/關切換鈕 */
+  .slot.otog{font-size:11.5px;border-style:solid;font-weight:600}
+  .slot.otog.off{background:#f4f6f7;border-color:#d3d9de;color:#8a939c}
+  .slot.otog.off:hover{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok)}
+  .slot.otog.on{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok)}
+  .slot.otog.on:hover{background:#f4f6f7;border-color:#d3d9de;color:#8a939c}
+  .banner.edit{background:#eef4ff;border-color:#9fbdf0;border-left-color:#2f5fa8;color:#1f3f75}
+  .pfoot{text-align:center;font-size:11.5px;color:var(--sub);margin-top:20px;line-height:1.9}
+  .pfoot a{color:var(--brand-d);font-weight:600;cursor:pointer;text-decoration:underline}
+  .pfoot .warn2{color:#8c1d18;font-weight:600}
+  select#selMonth{height:40px;min-width:0;width:auto;padding-right:6px}
+  .pk{display:flex;flex-direction:column}
+  /* 月曆卡片標題：左＝月份切換、中＝班表、右＝同步/重新整理 */
+  .card h2.calhead{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px}
+  .mnav{display:flex;align-items:center;gap:5px}
+  .calright{display:flex;align-items:center;gap:9px;justify-content:flex-end}
+  .caltitle{font-size:18px;font-weight:800;color:var(--brand-d);text-align:center;letter-spacing:1px}
+  .btn.nav{padding:0 9px;height:34px;font-size:12px;line-height:1}
+  /* 用 line-height 撐垂直置中、text-align-last 讓收合狀態的字水平置中 */
+  .card h2.calhead #selMonth{height:34px;line-height:34px;padding:0 6px 0 10px;min-width:118px;
+       font-size:15px;font-weight:700;color:var(--brand-d);text-align:center;text-align-last:center}
+  /* 後臺管理：每項功能各自收折 */
+  .admwrap{margin-top:10px}
+  details.sub{border:1px solid var(--line);border-radius:8px;margin-bottom:7px;background:#fbfcfd}
+  details.sub > summary{padding:8px 11px;font-size:13.5px;font-weight:600}
+  details.sub .subbody{padding:2px 11px 12px}
+  details.sub .hint{font-size:12px;color:var(--sub);margin-top:6px;line-height:1.6}
+  .lockstate{font-size:13px;margin-bottom:9px;padding:8px 11px;border-radius:7px;background:#eef2f5}
+  .lockstate.on{background:#fdecea;color:#8c1d18;font-weight:600}
+  .banner.lock{background:#fdf3e3;border-color:#e0c187;border-left-color:#a8620a;color:#7a4708}
+  /* 鎖定提示（手機版）：預設只顯示標題，點開才看說明。電腦版用頁首那顆小標 */
+  .locknote{background:#fdf3e3;border-color:#e0c187}
+  .locknote > summary{font-size:14px;font-weight:700;color:#7a4708;cursor:pointer;
+                      display:flex;align-items:center;list-style:none}
+  .locknote > summary::-webkit-details-marker{display:none}
+  .locknote .lockbody{font-size:13px;color:#7a4708;line-height:1.75;margin-top:8px}
+  @media (min-width:901px){ .locknote{display:none !important} }
+  .pkbtn{justify-content:flex-end}
+  .pkbtn .btn{height:40px;padding:0 14px;white-space:nowrap}
+  #actSlot:empty{display:none}
+  /* 鎖定提示的精簡版：電腦版擺頁首，手機版仍用整條橫幅 */
+  .lockchip{display:flex;align-items:center;height:40px;padding:0 13px;border-radius:8px;
+            background:#fdf3e3;color:#7a4708;border:1px solid #e0c187;
+            font-size:12.5px;font-weight:700;white-space:nowrap;align-self:flex-end}
+  .who{display:flex;align-items:center;background:#fff;border-radius:8px;
+       padding:0 12px;height:40px;box-sizing:border-box}
+  .who b{font-size:15px;color:var(--ink);white-space:nowrap}
+  /* 標題那一行：名字在左、動作鈕在右 */
+  .bline{display:flex;align-items:center;gap:10px;width:100%}
+  .bline b{flex:1;min-width:0}
+  .bdesc{display:block;margin-top:2px}
+  .bline .actbtn{display:none}          /* 電腦版：動作鈕放頁首，橫幅裡的隱藏 */
+  .bline .bttl{display:none}            /* 電腦版：「目前輪到誰」看順位面板就好 */
+  .banner.monly{display:none}           /* 該橫幅在電腦版沒有內容可顯示 */
+  ol.rank li .ico.turnlbl{font-size:11.5px;font-weight:700;white-space:nowrap}
+  .btn.sm{font-size:12px;padding:5px 10px}
+  .lb{display:block;font-size:12.5px;color:var(--sub);margin:10px 0 4px}
+  .pwtip{background:#fdecea;border:1px solid #e2a09a;color:#8c1d18;border-radius:10px;
+         padding:9px 14px;margin:14px 0 -4px;font-size:13.5px;display:flex;
+         align-items:center;gap:10px;flex-wrap:wrap}
+  .pwtip .btn{background:#b3261e}
+  .loginbox{max-width:400px;margin:34px auto 0}
+  .loginbox h2{justify-content:flex-start;font-size:16px}
+  #loginSeq,#loginPw{height:44px;width:100%;min-width:0;box-sizing:border-box}
+  .err{color:#b3261e;font-size:13px;margin-top:8px}
+  .cl{margin:0;padding:0;list-style:none}
+  .cl li{border-bottom:1px solid var(--line);padding:9px 0}
+  .cl li:last-child{border-bottom:none}
+  .cl .h{font-weight:700;font-size:14px;color:var(--brand-d)}
+  .cl .h .v{background:var(--brand-l);border-radius:4px;padding:0 6px;font-size:11.5px;margin-left:6px}
+  .cl .s{font-size:13px;color:var(--sub);margin-top:2px}
+
+  /* ---- 手機版：可排班日卡片 ---- */
+  .daylist{display:none}
+  .dayrow{border:1px solid var(--line);border-radius:9px;padding:6px 8px;margin-bottom:6px;background:#fff}
+  .dayrow .dhead{font-weight:700;margin-bottom:5px;display:flex;justify-content:space-between;font-size:14px}
+  .dayrow .cols{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .dayrow .cw{text-align:center}
+  .dayrow .slot,.dayrow .slotx{height:38px;gap:6px}
+  .ic{font-size:15px;line-height:1}
+  .ic.am{color:#e0921f}
+  .ic.pm{color:#3f6fb5}
+  .slot.ro{background:#fafbfc;color:#b6bfc7;border-style:solid;border-color:var(--line);cursor:default}
+  .banner.ro{background:#eef2f5;border-color:#c3ccd4;border-left-color:#6b7885;color:#3c4854}
+
+  /* ---- 右側順位面板 ---- */
+  ol.rank{list-style:none;margin:0;padding:0}
+  ol.rank li{display:flex;align-items:center;gap:7px;font-size:14px;padding:6px 9px;
+             border:1px solid var(--line);border-radius:8px;margin-bottom:5px;background:var(--wait-bg)}
+  ol.rank li .seq{width:20px;height:20px;flex:none;border-radius:5px;font-size:11px;font-weight:700;
+                  display:flex;align-items:center;justify-content:center;background:#e7ebef;color:var(--sub)}
+  ol.rank li .ico{margin-left:auto;font-size:13px;font-weight:700}
+  ol.rank li .nm{font-weight:600}
+  ol.rank li.wait{background:#fff;border-color:#c9d2d9}
+  ol.rank li.wait .ico{color:#b6bfc7;font-weight:400}
+  ol.rank li.done{background:var(--ok-bg);border-color:var(--ok-bd);color:var(--ok)}
+  ol.rank li.done .seq{background:var(--ok);color:#fff}
+  ol.rank li.done .nm{font-weight:400;opacity:.85}
+  ol.rank li.done .ico{color:var(--ok)}
+  ol.rank li.turn{background:var(--turn-bg);border:2px solid var(--turn-bd);
+                  color:var(--turn);box-shadow:0 0 0 3px #fdeed9}
+  ol.rank li.turn .seq{background:var(--turn);color:#fff}
+  ol.rank li.turn .nm{font-weight:800}
+  ol.rank li.me{outline:2px dotted var(--brand);outline-offset:1px}
+  /* 順位面板：手機版可收折（電腦版恆展開、不顯示箭頭） */
+  .rankcard summary{list-style:none;cursor:pointer;font-size:14px;font-weight:700;
+       color:var(--brand-d);display:flex;align-items:center;gap:8px}
+  .rankcard summary::-webkit-details-marker{display:none}
+  /* 三個收折標題共用同一顆三角形：原本只有排班順位是自訂的，
+     排班規則摘要與後臺管理用瀏覽器原生 marker，兩者大小不一樣看起來不整齊 */
+  .rankcard summary::before,
+  .locknote > summary::before,
+  .card > details > summary::before,
+  details.sub > summary::before{content:'\25B6';font-size:10px;color:var(--sub);margin-right:5px}
+  .rankcard[open] summary::before,
+  .locknote[open] > summary::before,
+  .card > details[open] > summary::before,
+  details.sub[open] > summary::before{content:'\25BC'}
+  .card > details > summary,
+  details.sub > summary{list-style:none}
+  .card > details > summary::-webkit-details-marker,
+  details.sub > summary::-webkit-details-marker{display:none}
+  .rankcard .rsum{margin-left:auto}
+  .rankcard .rsum{font-size:11.5px;font-weight:400;color:var(--sub)}
+  .rankcard .rdone{margin-left:auto;font-size:12px;font-weight:700;color:var(--ok);white-space:nowrap}
+  .rankcard .rankbody{margin-top:10px}
+  @media (min-width:901px){
+    .rankcard summary{cursor:default}
+    .rankcard summary::before,.rankcard .rsum{display:none}
+  }
+  .legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--sub);margin-top:8px}
+  .legend i{font-style:normal;display:inline-flex;align-items:center;gap:4px}
+  .legend .sw{width:11px;height:11px;border-radius:3px;display:inline-block;border:1px solid}
+  .sw.d{background:var(--ok-bg);border-color:var(--ok-bd)}
+  .sw.w{background:#fff;border-color:#c9d2d9}
+  .sw.t{background:var(--turn-bg);border-color:var(--turn-bd)}
+
+  .btn{font:inherit;font-size:14px;border:none;border-radius:8px;padding:9px 16px;
+       background:var(--brand);color:#fff;cursor:pointer;font-weight:600}
+  .btn.big{font-size:15px;padding:11px 20px}
+  .btn.turn{background:var(--turn)}
+  .btn.ghost{background:#fff;color:var(--brand);border:1px solid var(--brand)}
+  .btn.grey{background:#e7ebef;color:var(--sub)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+
+  ul.rules{margin:0;padding-left:19px;font-size:14px;color:var(--sub)}
+  ul.rules li{margin-bottom:3px}
+  .notes{white-space:pre-wrap;font-size:13.5px;background:var(--warn-l);
+         border-left:4px solid var(--warn);padding:8px 11px;border-radius:0 8px 8px 0}
+  details summary{cursor:pointer;font-size:14px;color:var(--brand-d);font-weight:600}
+
+  .mask{position:fixed;inset:0;background:rgba(20,28,38,.55);display:none;
+        align-items:center;justify-content:center;padding:16px;z-index:50}
+  .mask.on{display:flex}
+  .modal{background:#fff;border-radius:14px;max-width:470px;width:100%;padding:20px}
+  .modal h3{margin:0 0 10px;font-size:17px}
+  .modal .warns{background:var(--warn-l);border-radius:8px;padding:10px 12px;margin:10px 0}
+  .modal .warns ul{margin:0;padding-left:18px}
+  .modal .warns li{font-size:13.5px;margin-bottom:5px}
+  .modal .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:flex;
+         align-items:center;gap:12px;background:var(--ink);color:#fff;padding:10px 12px 10px 18px;
+         border-radius:26px;font-size:14px;z-index:60;opacity:0;transition:opacity .18s;
+         pointer-events:none;max-width:92vw}
+  .toast.on{opacity:.97;pointer-events:auto}
+  .toast button{font:inherit;font-size:13px;font-weight:700;border:none;border-radius:18px;
+                padding:5px 13px;background:#fff;color:var(--ink);cursor:pointer}
+  .demo{background:#fff4d6;border:1px solid #e8c86a;color:#7a5600;font-size:13px;
+        padding:7px 12px;border-radius:8px;margin-top:12px}
+
+  @media (max-width:900px){
+    .main{display:block}
+    /* 頁首壓成兩行：公會名＋登入者/設定/登出 一行，系統名一行 */
+    .hdr{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+    .donly{display:none}
+    .htxt{flex:0 0 auto}
+    /* 標題與右側登入者列同高，整個頁首壓成一行 */
+    .hdr{flex-wrap:nowrap}
+    .htxt{height:38px;display:flex;align-items:center}
+    h1{font-size:16px;letter-spacing:0;white-space:nowrap}
+    .mosp{display:inline}
+    .mobonly{display:inline}
+    .permgrid{grid-template-columns:1fr}
+    .rankcard .rdone{display:none}
+    .picker{margin-top:0;margin-left:auto;display:flex;flex-wrap:nowrap;gap:6px;align-items:center}
+    .picker label{display:none}
+    .lockchip{display:none !important}
+    /* 四個欄位一律 38px 等高；月份靠左，姓名／設定／登出靠右 */
+    .picker > .pk{height:38px}
+    .picker > .pk > *{height:38px;box-sizing:border-box}
+    .picker > .pk-who{margin-left:auto}
+    .who{padding:0 13px;justify-content:center}
+    .who b{font-size:14.5px;overflow:hidden;text-overflow:ellipsis}
+    .pkbtn .btn{padding:0 11px;font-size:13px}
+    #actSlot{display:none}               /* 手機版：動作鈕回到橫幅那一行 */
+    .bline .actbtn{display:inline-flex;align-items:center;margin-left:auto;
+                   font-size:14px;padding:0 15px;height:38px;flex:none}
+    .banner{padding:10px 12px}
+    .synctxt{display:none}
+    .caltitle{font-size:17px}
+    .btn.nav{padding:0 7px}
+    .card h2.calhead #selMonth{font-size:14px;min-width:0;padding:0 4px 0 6px}
+    .calright .btn{padding:0 10px;font-size:12.5px}
+    .bline .bttl{display:block;flex:1;min-width:0}
+    .banner.monly{display:flex}
+    .meta{justify-content:center;gap:8px 14px;margin-left:0}
+    table.sheet{display:none}
+    .daylist{display:block}
+    .wrap{padding:0 9px 60px}
+    .banner .push{margin-left:0;width:100%}
+    .banner .push .btn{flex:1}
+  }
+</style>
+
+<header>
+  <div class="wrap hdr">
+    <div class="htxt">
+      <h1 id="h1"><span class="donly">排班系統</span></h1>
+      <div class="sub donly" id="venueLine"></div>
+    </div>
+    <div class="picker" id="picker" style="display:none">
+      <div class="lockchip" id="lockChip" style="display:none"></div>
+      <div class="pk pk-who"><label>目前登入</label>
+        <div class="who"><b id="whoName">—</b></div>
+      </div>
+      <div class="pk pkbtn"><button class="btn ghost" id="btnChgPw" title="修改密碼">設定</button></div>
+      <div class="pk pkbtn"><button class="btn grey" id="btnLogout">登出</button></div>
+      <div class="pk pkbtn" id="actSlot"></div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="demoBar" class="demo" style="display:none">
+    🔧 <b>離線示範版</b>：姓名皆為<b>暱稱</b>、班表為<b>虛構資料</b>，沒有後端也不連任何服務。
+    可自由點選試用，重新整理即還原。示範帳號密碼一律 <b>0000</b>；<b>Ｂ．陳○美</b> 是超級管理者（全部後臺功能），
+    <b>Ｚ．會務人員</b> 已被授權「班表鎖定」。
+  </div>
+
+  <div id="login" style="display:none">
+    <div class="card loginbox">
+      <h2>請先登入</h2>
+      <div style="font-size:13px;color:var(--sub)" id="loginScope"></div>
+      <label class="lb">使用者</label>
+      <select id="loginSeq" style="width:100%"><option value="">▼ 請選擇使用者</option></select>
+      <label class="lb">密碼</label>
+      <input type="password" id="loginPw" style="width:100%" inputmode="numeric"
+             pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="4~6 位數字">
+      <div class="err" id="loginMsg" style="display:none"></div>
+      <button class="btn big" id="btnLogin" style="width:100%;margin-top:14px">登入</button>
+      <div style="font-size:12px;color:var(--sub);margin-top:10px;line-height:1.7" id="loginHelp"></div>
+    </div>
+  </div>
+
+  <div id="app" style="display:none">
+  <div class="pwtip" id="pwTip" style="display:none">
+    <span>🔓 你還在用預設密碼 <b id="pwDefault">—</b>，任何人都能用你的名字登入。</span>
+    <button class="btn sm" id="btnChgPw2">現在改密碼</button>
+  </div>
+  <div class="banner" id="banner"></div>
+  <div class="meta" id="meta"></div>
+
+  <div class="main" id="mainGrid">
+    <div class="col-cal">
+      <div class="card">
+        <h2 class="calhead">
+          <span class="mnav">
+            <button class="btn ghost nav" id="btnPrev" title="上個月">◀</button>
+            <select id="selMonth"></select>
+            <button class="btn ghost nav" id="btnNext" title="下個月">▶</button>
+          </span>
+          <span class="caltitle">班表</span>
+          <span class="calright">
+            <span class="synctxt" style="font-size:11.5px;color:var(--sub);font-weight:400">同步 <span id="syncAt">—</span></span>
+            <button class="btn ghost" id="btnReload" style="font-size:12.5px;padding:5px 11px">重新整理</button>
+          </span>
+        </h2>
+        <table class="sheet">
+          <colgroup><col class="labcol"><col span="7"></colgroup>
+          <thead><tr><th class="corner"></th>
+            <th>周日</th><th>周一</th><th>週二</th><th>週三</th><th>週四</th><th>週五</th><th>週六</th>
+          </tr></thead>
+          <tbody id="calBody"></tbody>
+        </table>
+        <div class="daylist" id="dayList"></div>
+        <div style="font-size:12px;color:var(--sub);margin-top:8px">
+          灰底 X ＝當日不開放。<b>點一下空格就填入你的名字</b>（不符規則才會跳確認），點自己的班可取消，兩者都能立刻復原。
+        </div>
+      </div>
+    </div>
+
+    <aside class="col-side">
+      <details class="card locknote" id="lockNote" style="display:none">
+        <summary id="lockNoteTitle">🔒 班表已鎖定</summary>
+        <div class="lockbody" id="lockNoteBody"></div>
+      </details>
+      <div class="card" id="notesCard" style="display:none">
+        <h2>當月填寫注意事項</h2>
+        <div class="notes" id="notes"></div>
+      </div>
+      <details class="card rankcard" id="rankCard">
+        <summary>本月排班順位<span class="rsum" id="rankSummary"></span><span class="rdone" id="rankDone"></span></summary>
+        <div class="rankbody">
+          <ol class="rank" id="rankList"></ol>
+          <div class="legend">
+            <i><span class="sw t"></span>現在輪到</i>
+            <i><span class="sw w"></span>還沒填</i>
+            <i><span class="sw d"></span>已完成</i>
+          </div>
+          <div style="font-size:11.5px;color:var(--sub);margin-top:8px;line-height:1.5">
+            右側數字＝本月班數／前三個月（<span id="prevMonths"></span>）班數，供 4 天以上連假優先權參考。
+          </div>
+        </div>
+      </details>
+    </aside>
+
+    <div class="col-rest">
+      <div class="card">
+        <details>
+          <summary id="rulesTitle">排班規則摘要</summary>
+          <ul class="rules" style="margin-top:10px" id="rulesList"></ul>
+        </details>
+      </div>
+
+      <div class="card" id="admCard" style="display:none">
+        <details>
+          <summary>後臺管理</summary>
+          <div class="admwrap">
+
+            <details class="sub" data-perm="lock"><summary>班表鎖定</summary><div class="subbody">
+              <div class="lockstate" id="lockState">—</div>
+              <div class="row">
+                <select id="lockMonth"></select>
+                <button class="btn" id="btnLock">鎖定此月份</button>
+                <button class="btn ghost" id="btnUnlock">解除鎖定</button>
+              </div>
+              <div class="hint">鎖定後，其他人登入只看得到<b>當月</b>班表且不能異動，「目前輪到誰」等提示也會隱藏。
+                到被鎖月份的 1 號自動解除，不必手動處理。</div>
+            </div></details>
+
+            <details class="sub" data-perm="notes"><summary>編輯注意事項</summary><div class="subbody">
+              <div class="row" style="margin-bottom:8px">
+                <select id="notesMonth"></select>
+                <span class="hint" style="margin:0">選要編輯哪個月</span>
+              </div>
+              <textarea id="adminNotes" rows="4" style="width:100%"></textarea>
+              <button class="btn" id="btnSaveNotes" style="margin-top:8px">儲存</button>
+              <div class="hint">一行一則，會寫進該月分頁的「當月班表填寫注意事項」欄。</div>
+            </div></details>
+
+            <details class="sub" data-perm="skip"><summary>標記逾期放棄</summary><div class="subbody">
+              <div class="row">
+                <select id="skipName"></select>
+                <button class="btn ghost" id="btnSkip">標記完成，交棒下一位</button>
+              </div>
+              <div class="hint">逾期未填的人用這個往下遞補。</div>
+            </div></details>
+
+            <details class="sub" data-perm="create"><summary>建立月份分頁</summary><div class="subbody">
+              <div class="row">
+                <span class="hint" style="margin:0">從最新月份一路建到</span>
+                <select id="tgtRoc"></select><span class="hint" style="margin:0">年</span>
+                <select id="tgtMon"></select><span class="hint" style="margin:0">月</span>
+                <button class="btn" id="btnCreateThrough">建立分頁</button>
+              </div>
+              <div class="row" style="margin-top:9px">
+                <button class="btn ghost" id="btnCreate">只建下一個月</button>
+              </div>
+              <div class="hint">順位逐月自動遞補；<b>只自動開放週日</b>，週六與國定假日一律填 X，之後用「編輯開放日」調整。</div>
+            </div></details>
+
+            <details class="sub" data-perm="openday"><summary>編輯開放日</summary><div class="subbody">
+              <button class="btn ghost" id="btnEditOpen">開始編輯開放日</button>
+              <div class="hint">點月曆格子切換「開放／X」，改動直接寫回試算表。已經有人填班的格子不能關。</div>
+            </div></details>
+
+            <details class="sub" data-perm="resetpw"><summary>使用者密碼重設</summary><div class="subbody">
+              <div class="row">
+                <select id="resetName"></select>
+                <button class="btn ghost" id="btnResetPw">重設密碼</button>
+                <button class="btn ghost" id="btnPwStatus">看誰還沒改密碼</button>
+              </div>
+              <div class="hint">重設後該員要用預設密碼重新登入並自行修改。</div>
+            </div></details>
+
+            <details class="sub" data-perm="roster"><summary>增減人員</summary><div class="subbody">
+              <div class="rlist" id="rosterList">—</div>
+              <div class="row" style="margin-top:9px">
+                <input class="txt" id="rosterNew" placeholder="新進人員姓名" maxlength="12" style="flex:1;min-width:120px">
+                <button class="btn" id="btnRosterAdd">加入順位最後</button>
+              </div>
+              <div class="hint">新人放在順位最後、代號接著編；移除會從<b>本月起所有已建立的月份分頁</b>拿掉（歷史月份不動），
+                該員若還有班要先取消。加入後請通知本人用預設密碼登入。</div>
+            </div></details>
+
+            <details class="sub" data-perm="grant"><summary>權限授權</summary><div class="subbody">
+              <div class="row">
+                <select id="permUser"></select>
+                <span class="hint" style="margin:0" id="permUserNote"></span>
+              </div>
+              <div class="permgrid" id="permBoxes"></div>
+              <button class="btn" id="btnPermSave" style="margin-top:9px">儲存授權</button>
+              <div class="hint">超級管理者（Config.gs 的 ADMIN_NAMES）擁有全部功能，不必授權；
+                這裡是把個別後臺項目開放給其他人，包括會務人員帳號。</div>
+            </div></details>
+
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <div class="pfoot">
+    <span id="ftOrg"></span>　<span id="ftSys">排班系統</span>　<b>v3.9 離線示範版</b><br>
+    <span class="warn2" id="ftConf"></span><br>
+    <a id="lnkLog">更新紀錄</a>　·　最後更新 <span id="lastUpd">—</span><br>
+    <span id="ftContact"></span>
+  </div>
+</div>
+
+<div class="mask" id="mask"><div class="modal">
+  <h3 id="mTitle">確認</h3>
+  <div id="mBody"></div>
+  <div class="foot">
+    <button class="btn grey" id="mCancel">取消</button>
+    <button class="btn" id="mOk">確定</button>
+  </div>
+</div></div>
+<div class="toast" id="toast"><span id="toastMsg"></span><button id="toastAct" style="display:none"></button></div>
+
+<script>
+/* ===================== 後端橋接（Apps Script） ===================== */
+var LIVE = (typeof google !== 'undefined' && google.script && google.script.run);
+function api(fn, arg){
+  return new Promise(function(res, rej){
+    // 示範版：全部走記憶體裡的假後端，不連任何服務
+    setTimeout(function(){
+      try{ res(DEMO[fn] ? DEMO[fn](arg) : {ok:false, msg:'示範版沒有這個功能'}); }
+      catch(e){ rej(e); }
+    }, 90);
+  });
+}
+
+
+/* ===================== 離線示範用的假後端 ===================== */
+/* 全部在瀏覽器記憶體裡跑，沒有任何連線。姓名皆為暱稱、班表為虛構資料。 */
+var DEMO = (function(){
+  var UI = {
+  "orgName": "○○藥師公會",
+  "orgShort": "○○藥師公會",
+  "systemName": "假日急診排班系統",
+  "titleDesktop": "○○藥師公會　假日急診排班系統",
+  "titleMobile": "藥師 假日排班",
+  "venueLine": "○○醫院　早班 08:00–16:00／晚班 16:00–24:00",
+  "contactShort": "管理者",
+  "contactLine": "正式系統的聯絡方式請在 Config.gs 設定",
+  "forgotLine": "示範帳號密碼一律 0000；正式版忘記密碼由管理者重設。",
+  "loginScope": "離線示範版：任選一位使用者即可進入，資料全部是虛構的。",
+  "confidentialNote": "本頁為架構示範，姓名皆為暱稱、班表為虛構資料",
+  "rulesTitle": "排班規則摘要（範例）",
+  "shifts": {
+    "am": {
+      "label": "早班",
+      "hours": "0800~1600"
+    },
+    "pm": {
+      "label": "晚班",
+      "hours": "1600~2400"
+    }
+  },
+  "rules": [
+    "順位採輪替制，每月順位依序向前遞補一位。",
+    "每月 5 號公布次月可排班天數並開始預壓；每位藥師至多 1 天思考時間，逾期視同放棄，由下順位者接續。務必於每月 15 號前完成。",
+    "每位藥師至多填寫 1 班；當月無法支援可不填。",
+    "4 天以上連假之班別，優先以前三個月排班最多者填寫；班次相同者依順位決定。",
+    "可自行與優先順位藥師協調代為預壓，待全體班表完成後再調整換回。",
+    "無特定偏好者得放棄優先排班權，於最後順位再選。",
+    "勞基法：每日僅得排一班、不得連續排班 4 日以上（最多 3 日）、不得晚班接隔日早班。",
+    "新進藥師須完成實作演練並評核通過始納入順位，初始順位自最後開始。",
+    "連續兩季無排班，或表現無法勝任且輔導未改善者，剔除排班順位。",
+    "未盡事宜悉依管理者之解釋與協調為準。"
+  ]
+};
+  var PERMS = [
+    { k: 'lock',    label: '班表鎖定' }, { k: 'notes',   label: '編輯注意事項' },
+    { k: 'skip',    label: '標記逾期放棄' }, { k: 'create',  label: '建立月份分頁' },
+    { k: 'openday', label: '編輯開放日' }, { k: 'resetpw', label: '使用者密碼重設' },
+    { k: 'roster',  label: '增減人員' }, { k: 'manage',  label: '代管班表（取消他人的班、代交棒、鎖定期間仍可改）' }
+  ];
+  // 一律用「王小明」式的通用假名：三個字才看得出遮罩效果（王○明），且一眼就知道不是真人
+  var NICK = ['王小明','陳小美','林小華','張小芳','李小強','黃小婷','吳小豪','劉小君',
+              '蔡小翰','鄭小怡','謝小宏','許小薇','洪小家','曾小芬','周小志','賴小玲'];
+  var ADMIN = '陳小美';                     // 示範用的超級管理者（代號 Ｂ）
+  var STAFF = [{ seq:'Z', name:'會務人員' }];
+  var pw = {}, fails = {}, lock = null, tokens = {};
+  var grants = { '會務人員': ['lock'] };    // 示範：會務人員一開始就被授權「班表鎖定」
+
+  function lz(n){ return ('0'+n).slice(-2); }
+  function iso(d){ return d.getFullYear()+'-'+lz(d.getMonth()+1)+'-'+lz(d.getDate()); }
+  function key(roc,m){ return roc+'/'+lz(m); }
+  function label(k){ return k.split('/')[0]+'年'+(k.split('/')[1]*1)+'月'; }
+  function dec(k){ var p=k.split('/'); return {roc:+p[0], m:+p[1], y:+p[0]+1911}; }
+
+  var now = new Date();
+  var CUR = { roc: now.getFullYear()-1911, m: now.getMonth()+1 };
+  function shift(base, delta){
+    var m = base.m + delta, roc = base.roc;
+    while(m > 12){ m -= 12; roc += 1; }
+    while(m < 1){ m += 12; roc -= 1; }
+    return { roc: roc, m: m };
+  }
+  var MK = [shift(CUR,1), CUR, shift(CUR,-1)].map(function(x){ return key(x.roc,x.m); });
+
+  /* 建一個月的格線：週日全開，另外開兩個週六當「例外開診」示範 */
+  function build(k, fillRatio){
+    var d = dec(k), first = new Date(d.y, d.m-1, 1);
+    var start = new Date(first.getTime() - first.getDay()*864e5);
+    var last = new Date(d.y, d.m, 0);
+    var end = new Date(last.getTime() + (6-last.getDay())*864e5);
+    var days = [], cur = new Date(start.getTime()), satOpened = 0, filled = 0;
+    while(cur <= end){
+      var inM = (cur.getMonth()+1 === d.m);
+      var open = false;
+      if(inM){
+        if(cur.getDay() === 0) open = true;
+        else if(cur.getDay() === 6 && satOpened < 2){ open = true; satOpened++; }
+      }
+      var am = open ? '' : null, pm = open ? '' : null;
+      if(open && Math.random() < fillRatio){ am = NICK[filled % 16]; filled++; }
+      if(open && Math.random() < fillRatio){ pm = NICK[(filled+5) % 16]; filled++; }
+      days.push({ iso: iso(cur), wd: cur.getDay(), dayNum: cur.getDate(), inMonth: inM,
+                  open: open, am: am, pm: pm, amClosed: !open, pmClosed: !open, longHoliday: false });
+      cur = new Date(cur.getTime() + 864e5);
+    }
+    return days;
+  }
+
+  var SEQ = 'ABCDEFGHIJKLMNOPQRSTUVWXY'.split('');
+  var DATA = {};
+  MK.forEach(function(k, i){
+    var startIdx = (MK.length - i) * 2 % 16;          // 每個月順位往前遞補
+    DATA[k] = {
+      days: build(k, i === 0 ? 0 : (i === 1 ? 0.9 : 1)),
+      notes: i === 1 ? '1. 本頁為示範版，資料全部是虛構的。' : '',
+      order: (function(){
+        var o = [];
+        for(var j=0;j<16;j++){ var t=(startIdx+j)%16;
+          o.push({ seq: SEQ[t], name: NICK[t], done: i > 0 }); }
+        return o;
+      })()
+    };
+  });
+
+  function roster(){
+    var newest = DATA[MK[0]].order.slice().sort(function(a,b){ return a.seq<b.seq?-1:1; });
+    var out = newest.map(function(o){ return { seq:o.seq, name:o.name }; });
+    STAFF.forEach(function(a){ out.push({ seq:a.seq, name:a.name }); });
+    return out;
+  }
+  function isStaff(n){ return STAFF.some(function(a){ return a.name===n; }); }
+  function mask(n){ return n.length<=2 ? n.charAt(0)+'○' : n.charAt(0)+'○'+n.charAt(n.length-1); }
+  function fw(c){ return String.fromCharCode(c.charCodeAt(0)+0xFEE0); }
+  function nameOf(seq){ var hit=''; roster().forEach(function(r){ if(r.seq===seq) hit=r.name; }); return hit; }
+  function isSuper(n){ return n===ADMIN; }
+  function granted(n){ var o={}; (grants[n]||[]).forEach(function(k){ o[k]=true; }); return o; }
+  function permsOf(n){ var g=granted(n), out={ grant:isSuper(n) }; PERMS.forEach(function(p){ out[p.k]=isSuper(n)||!!g[p.k]; }); return out; }
+  function can(n, k){ if(!n) return false; if(isSuper(n)) return true; if(k==='grant') return false; return !!granted(n)[k]; }
+  function anyPerm(n){ var p=permsOf(n); return Object.keys(p).some(function(k){ return p[k]; }); }
+  function permLabel(k){ var l=k; PERMS.forEach(function(p){ if(p.k===k) l=p.label; }); return l; }
+  function todayIso(){ return iso(new Date()); }
+  function lockState(){
+    if(!lock) return { locked:false };
+    var d = dec(lock), until = iso(new Date(d.y, d.m-1, 1));
+    if(todayIso() >= until){ lock = null; return { locked:false }; }
+    return { locked:true, month:lock, label:label(lock), until:until };
+  }
+  function viewer(n){
+    return { name:n, readOnly:isStaff(n), isDefaultPw:!pw[n], defaultPw:'0000',
+             perms:permsOf(n), isSuper:isSuper(n), canAdmin:anyPerm(n) };
+  }
+  function monthOut(k, who){
+    var d = DATA[k];
+    return { name:k, label:label(k), year:dec(k).y, month:dec(k).m,
+             days: JSON.parse(JSON.stringify(d.days)),
+             order: JSON.parse(JSON.stringify(d.order)),
+             notes: d.notes, prevMonths:['前 3 個月'], prevCounts:{},
+             today: todayIso(), lock: lockState(), forcedMonth:false, viewer: viewer(who) };
+  }
+  function who(t){ return tokens[t] || null; }
+  function deny(t, k){ var n=who(t); if(!n) return {ok:false,needLogin:true,msg:'請重新登入'};
+                       if(!can(n,k)) return {ok:false,msg:'你沒有「'+permLabel(k)+'」的權限'}; return null; }
+  function slot(k, i, sh){ var hit=null; DATA[k].days.forEach(function(x){ if(x.iso===i) hit=x; }); return hit; }
+  function affected(){ var ck=key(CUR.roc,CUR.m); return MK.filter(function(k){ return k>=ck; }); }
+
+  return {
+    getBootstrap: function(){
+      return { months: MK.map(function(k){ return {name:k, label:label(k)}; }),
+        today: todayIso(),
+        defaultMonth: lockState().locked ? key(CUR.roc,CUR.m) : MK[0],
+        currentMonth: key(CUR.roc,CUR.m), lock: lockState(), ui: UI,
+        roster: roster().map(function(r){
+          return { seq:r.seq, label: fw(r.seq)+'．'+(isStaff(r.name) ? r.name : mask(r.name)) }; }),
+        rules: { maxShifts:1, maxConsecutive:3, deadlineDay:15, openDay:5, maxFail:10, lockMin:10 } };
+    },
+    login: function(p){
+      var n = nameOf(p.seq);
+      if(!n) return { ok:false, msg:'名單裡沒有這個代號' };
+      var f = fails[n] || {n:0, until:0};
+      if(f.until > Date.now()) return { ok:false, msg:'密碼錯誤次數過多，已鎖定，請稍後再試' };
+      if(String(p.pw) !== (pw[n] || '0000')){
+        f.n++; if(f.n>=10){ f.until = Date.now()+600000; f.n=0; }
+        fails[n]=f;
+        return { ok:false, msg: f.until>Date.now() ? '密碼錯誤 10 次，已鎖定 10 分鐘'
+                 : '密碼不正確（再錯 '+(10-f.n)+' 次會鎖定 10 分鐘）' };
+      }
+      fails[n]=null;
+      var t = 'demo_'+n+'_'+Date.now(); tokens[t]=n;
+      return { ok:true, token:t, name:n, isDefault: !pw[n], readOnly: isStaff(n) };
+    },
+    changePassword: function(p){
+      var n = who(p.token); if(!n) return {ok:false, needLogin:true, msg:'請重新登入'};
+      if(String(p.oldPw) !== (pw[n]||'0000')) return {ok:false, msg:'目前密碼不正確'};
+      if(!/^[0-9]{4,6}$/.test(String(p.newPw))) return {ok:false, msg:'新密碼請設 4~6 位數字'};
+      pw[n]=String(p.newPw); return {ok:true, msg:'密碼已更新'};
+    },
+    getMonth: function(p){
+      var n = who(p.token); if(!n) return { needLogin:true };
+      return monthOut(p.month, n);
+    },
+    submitShift: function(p){
+      var n = who(p.token); if(!n) return {ok:false, needLogin:true, msg:'請重新登入'};
+      if(isStaff(n)) return {ok:false, msg:'此帳號不參與排班，不能填寫或修改班表'};
+      var st=lockState(); if(st.locked && !can(n,'manage')) return {ok:false, msg:st.label+' 班表已鎖定'};
+      var x = slot(p.month, p.iso, p.shift); if(!x) return {ok:false,msg:'找不到這一格'};
+      if(x[p.shift]) return {ok:false, msg:'慢了一步：已被「'+x[p.shift]+'」填走'};
+      x[p.shift]=p.name; return {ok:true, data: monthOut(p.month, n)};
+    },
+    cancelShift: function(p){
+      var n = who(p.token); if(!n) return {ok:false, needLogin:true, msg:'請重新登入'};
+      if(isStaff(n)) return {ok:false, msg:'此帳號不參與排班，不能填寫或修改班表'};
+      var st=lockState(); if(st.locked && !can(n,'manage')) return {ok:false, msg:st.label+' 班表已鎖定'};
+      var x = slot(p.month, p.iso, p.shift); if(!x || !x[p.shift]) return {ok:false,msg:'這一格本來就是空的'};
+      if(x[p.shift]!==n && !can(n,'manage')) return {ok:false, msg:'這是「'+x[p.shift]+'」的班'};
+      x[p.shift]=''; return {ok:true, data: monthOut(p.month, n)};
+    },
+    setDone: function(p){
+      var n = who(p.token); if(!n) return {ok:false, needLogin:true, msg:'請重新登入'};
+      if(isStaff(n)) return {ok:false, msg:'此帳號不參與排班，不能填寫或修改班表'};
+      var st=lockState(); if(st.locked && !can(n,'manage')) return {ok:false, msg:st.label+' 班表已鎖定'};
+      if(!can(n,'manage') && n!==p.name) return {ok:false, msg:'只能替自己交棒'};
+      DATA[p.month].order.forEach(function(o){ if(o.name===p.name) o.done = p.done; });
+      return {ok:true, data: monthOut(p.month, n)};
+    },
+    setSlotOpen: function(p){
+      var d = deny(p.token,'openday'); if(d) return d;
+      var x = slot(p.month, p.iso, p.shift); if(!x) return {ok:false,msg:'找不到這一格'};
+      if(!p.open && x[p.shift]) return {ok:false, msg:'這一格已有人填班，請先取消'};
+      x[p.shift] = p.open ? '' : null;
+      x[p.shift+'Closed'] = !p.open;
+      x.open = !(x.amClosed && x.pmClosed);
+      return {ok:true, data: monthOut(p.month, who(p.token))};
+    },
+    saveNotes: function(p){
+      var d = deny(p.token,'notes'); if(d) return d;
+      DATA[p.month].notes = p.notes;
+      return {ok:true, data: monthOut(p.month, who(p.token))};
+    },
+    adminSkip: function(p){
+      var d = deny(p.token,'skip'); if(d) return d;
+      DATA[p.month].order.forEach(function(o){ if(o.name===p.name) o.done = true; });
+      return {ok:true, data: monthOut(p.month, who(p.token))};
+    },
+    setLock: function(p){
+      var d = deny(p.token,'lock'); if(d) return d;
+      lock = p.month;
+      return {ok:true, msg: label(p.month)+' 班表已鎖定（示範）'};
+    },
+    clearLock: function(p){
+      var d = deny(p.token,'lock'); if(d) return d;
+      lock = null; return {ok:true, msg:'已解除鎖定'};
+    },
+    adminResetPw: function(p){
+      var d = deny(p.token,'resetpw'); if(d) return d;
+      delete pw[p.name]; fails[p.name]=null;
+      return {ok:true, msg:p.name+' 的密碼已重設為預設值'};
+    },
+    adminPwStatus: function(p){
+      var d = deny(p.token,'resetpw'); if(d) return d;
+      return {ok:true, rows: roster().map(function(r){
+        var f=fails[r.name]||{until:0};
+        return { name:r.name, isDefault: !pw[r.name],
+                 lockedMin: f.until>Date.now() ? Math.ceil((f.until-Date.now())/60000) : 0 }; })};
+    },
+    adminUsers: function(p){
+      var n = who(p.token); if(!n) return {ok:false, needLogin:true, msg:'請重新登入'};
+      if(!isSuper(n) && !can(n,'roster')) return {ok:false, msg:'你沒有「增減人員」的權限'};
+      return { ok:true, isSuper:isSuper(n), keys: isSuper(n) ? PERMS : [],
+        rows: roster().map(function(r){
+          var o={ seq:r.seq, name:r.name, staff:isStaff(r.name), superAdmin:isSuper(r.name) };
+          if(isSuper(n)) o.perms = (grants[r.name]||[]).slice();
+          return o; }) };
+    },
+    setPerms: function(p){
+      var n = who(p.token); if(!n) return {ok:false, needLogin:true, msg:'請重新登入'};
+      if(!isSuper(n)) return {ok:false, msg:'只有超級管理者能授權'};
+      if(isSuper(p.name)) return {ok:false, msg:p.name+' 是超級管理者，本來就有全部功能'};
+      var valid={}; PERMS.forEach(function(x){ valid[x.k]=true; });
+      var list=(p.perms||[]).filter(function(k){ return valid[k]; });
+      if(list.length) grants[p.name]=list; else delete grants[p.name];
+      return {ok:true, msg:p.name+' 的後臺權限已更新：'+(list.map(permLabel).join('、')||'無')};
+    },
+    rosterAdd: function(p){
+      var d = deny(p.token,'roster'); if(d) return d;
+      var name=String(p.name||'').trim();
+      if(!name) return {ok:false, msg:'請輸入姓名'};
+      if(roster().some(function(r){ return r.name===name; })) return {ok:false, msg:'名單裡已經有「'+name+'」'};
+      var used={}; roster().forEach(function(r){ used[r.seq]=true; });
+      var seq=''; for(var i=0;i<SEQ.length && !seq;i++) if(!used[SEQ[i]]) seq=SEQ[i];
+      if(!seq) return {ok:false, msg:'代號已用完'};
+      var months=affected();
+      months.forEach(function(k){ DATA[k].order.push({ seq:seq, name:name, done:false }); });
+      return {ok:true, seq:seq, msg:'已將 '+name+' 加入順位最後（代號 '+seq+'）：'+months.join('、')};
+    },
+    rosterRemove: function(p){
+      var d = deny(p.token,'roster'); if(d) return d;
+      var name=String(p.name||'').trim();
+      if(isSuper(name)) return {ok:false, msg:name+' 是超級管理者，請先在 Config.gs 的 ADMIN_NAMES 拿掉'};
+      if(isStaff(name)) return {ok:false, msg:name+' 是會務人員帳號，要拿掉請改 Config.gs 的 STAFF_ACCOUNTS'};
+      var months=affected(), busy=[];
+      months.forEach(function(k){ if(DATA[k].days.some(function(x){ return x.am===name||x.pm===name; })) busy.push(label(k)); });
+      if(busy.length) return {ok:false, msg:name+' 在 '+busy.join('、')+' 還有班，請先取消那些班再移除'};
+      months.forEach(function(k){ DATA[k].order = DATA[k].order.filter(function(o){ return o.name!==name; }); });
+      delete pw[name]; delete grants[name];
+      return {ok:true, msg:'已將 '+name+' 移出順位：'+months.join('、')+'。歷史月份的紀錄不受影響'};
+    },
+    createNextMonth: function(p){ var d=deny(p.token,'create'); if(d) return d;
+      return {ok:false, msg:'示範版不支援建立分頁'}; },
+    createMonthsThrough: function(p){ var d=deny(p.token,'create'); if(d) return d;
+      return {ok:false, msg:'示範版不支援建立分頁'}; }
+  };
+})();
+
+/* ===================== 狀態 ===================== */
+var S = {month:null, me:'', token:'', isDefaultPw:false, readOnly:false, canAdmin:false, isSuper:false, perms:{}, cache:{},
+         lock:null, viewOnly:false, notesMonth:'', want:'', data:null, boot:null, admin:false, editOpen:false, pending:null,
+         ui:{shifts:{am:{label:'早班',hours:''},pm:{label:'晚班',hours:''}}, contactShort:'管理者'}, users:null};
+
+/* 組織專屬文字全部來自 bootstrap.ui（Config.gs），這裡只負責填進畫面 */
+function shLabel(sh){ return (S.ui.shifts[sh]||{}).label || (sh==='am'?'早班':'晚班'); }
+function shHours(sh){ return (S.ui.shifts[sh]||{}).hours || ''; }
+function contact(){ return S.ui.contactShort || '管理者'; }
+function applyUi(ui){
+  if(!ui) return;
+  S.ui = ui;
+  var r = (S.boot && S.boot.rules) || {};
+  try{ document.title = (ui.orgShort||'') + ' ' + (ui.systemName||''); }catch(e){}
+  $('h1').innerHTML = '<span class="donly">'+ui.titleDesktop+'</span><span class="mobonly">'+ui.titleMobile+'</span>';
+  $('venueLine').textContent = ui.venueLine || '';
+  $('loginScope').textContent = ui.loginScope || '';
+  $('loginHelp').innerHTML =
+    '第一次使用請輸入'+contact()+'提供的預設密碼，登入後請立即修改。<br>'+
+    '密碼連續輸錯 '+(r.maxFail||10)+' 次會鎖定 '+(r.lockMin||10)+' 分鐘。<br>'+
+    (ui.forgotLine||'');
+  $('rulesTitle').textContent = ui.rulesTitle || '排班規則摘要';
+  $('rulesList').innerHTML = (ui.rules||[]).map(function(x){ return '<li>'+x+'</li>'; }).join('');
+  $('ftOrg').textContent = ui.orgName || '';
+  $('ftSys').textContent = ui.systemName || '排班系統';
+  $('ftConf').textContent = ui.confidentialNote || '';
+  $('ftContact').textContent = ui.contactLine || '';
+}
+
+/* 更新紀錄：同一天彙整成一則，新的放最前面 */
+var CHANGELOG = [
+  {d:'2026/09/08', v:'v3.9', t:'權限授權與增減人員',
+   s:'後臺新增「權限授權」（把個別後臺功能開放給指定帳號，含會務人員）與「增減人員」（網頁上直接增刪順位藥師）；組織設定抽成獨立的 Config.gs。'},
+  {d:'2026/09/07', v:'v3.8', t:'個人密碼登入與後臺管理',
+   s:'新增個人密碼登入（代號登入、可自行修改）與唯讀的會務人員帳號；後臺管理改為僅管理者可見、各功能分項收折，並新增班表鎖定；月份切換移到班表標題列，頁首置頂。'},
+  {d:'2026/08/12', v:'v1.0', t:'排班網頁上線',
+   s:'取代試算表共用填寫，資料仍寫回原班表；16 位藥師依順位填班，不符規則只警告不擋。'}
+];
+var $ = function(id){ return document.getElementById(id); };
+var WD = ['日','一','二','三','四','五','六'];
+
+var toastTimer=null;
+function toast(msg, actLabel, actFn){
+  var t=$('toast'), b=$('toastAct');
+  $('toastMsg').textContent=msg;
+  if(actLabel){ b.style.display=''; b.textContent=actLabel;
+    b.onclick=function(){ t.classList.remove('on'); actFn(); }; }
+  else b.style.display='none';
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){ t.classList.remove('on'); }, actLabel?7000:2600);
+}
+function busy(on){ document.body.style.cursor = on?'progress':''; }
+
+/* ===================== 規則檢核（軟提示，只警告不擋） ===================== */
+function myShifts(){
+  var out=[];
+  S.data.days.forEach(function(d){
+    if(d.am===S.me) out.push({iso:d.iso,shift:'am'});
+    if(d.pm===S.me) out.push({iso:d.iso,shift:'pm'});
+  });
+  return out;
+}
+function turnOf(){
+  var t=null;
+  S.data.order.forEach(function(o){ if(!t && !o.done) t=o; });
+  return t;
+}
+function meRow(){
+  var r=null; S.data.order.forEach(function(o){ if(o.name===S.me) r=o; }); return r;
+}
+function deadline(){
+  var y=S.data.year, m=S.data.month-1; if(m===0){m=12;y--;}
+  return {open:y+'/'+m+'/'+S.boot.rules.openDay, due:y+'/'+m+'/'+S.boot.rules.deadlineDay,
+          dueIso:y+'-'+('0'+m).slice(-2)+'-'+('0'+S.boot.rules.deadlineDay).slice(-2)};
+}
+function checkRules(iso, shift){
+  var w=[], mine=myShifts(), R=S.boot.rules;
+  var t=turnOf(), myPos=-1, turnPos=-1;
+  S.data.order.forEach(function(o,i){ if(o.name===S.me) myPos=i; if(t&&o.name===t.name) turnPos=i; });
+
+  if(t && t.name!==S.me && myPos>turnPos)
+    w.push('<b>還沒輪到你</b>：目前輪到第 '+(turnPos+1)+' 位「'+t.name+'」，你是第 '+(myPos+1)+
+           ' 位。若已與前順位藥師協調代壓，可繼續送出。');
+  if(t && t.name!==S.me && myPos>=0 && myPos<turnPos)
+    w.push('你（第 '+(myPos+1)+' 位）已勾選完成填表，這次是補填。');
+
+  if(mine.length >= R.maxShifts)
+    w.push('<b>超過每月班數</b>：規則為每位藥師至多填寫 '+R.maxShifts+' 班，你本月已填 '+mine.length+' 班。');
+
+  var sameDay = mine.filter(function(x){ return x.iso===iso; });
+  if(sameDay.length) w.push('<b>同日兩班</b>：勞基法要求每日僅得排一班，你當天已排 '+
+    shLabel(sameDay[0].shift)+'。');
+
+  var set={}; mine.forEach(function(x){ set[x.iso]=true; }); set[iso]=true;
+  var keys=Object.keys(set).sort(), run=1, max=1;
+  for(var i=1;i<keys.length;i++){
+    run = ((new Date(keys[i])-new Date(keys[i-1]))===864e5) ? run+1 : 1;
+    if(run>max) max=run;
+  }
+  if(max > R.maxConsecutive)
+    w.push('<b>連續排班過長</b>：勞基法要求不得連續排班 4 日以上（最多 '+R.maxConsecutive+
+           ' 日），送出後你將連續 '+max+' 日。');
+
+  var prev = new Date(new Date(iso).getTime()-864e5).toISOString().slice(0,10);
+  var next = new Date(new Date(iso).getTime()+864e5).toISOString().slice(0,10);
+  if(shift==='am' && mine.some(function(x){ return x.iso===prev && x.shift==='pm'; }))
+    w.push('<b>晚班接早班</b>：你前一日（'+prev+'）排了晚班，規則不得晚班接隔日早班。');
+  if(shift==='pm' && mine.some(function(x){ return x.iso===next && x.shift==='am'; }))
+    w.push('<b>晚班接早班</b>：你隔日（'+next+'）排了早班，規則不得晚班接隔日早班。');
+
+  var day=null; S.data.days.forEach(function(d){ if(d.iso===iso) day=d; });
+  if(day && day.longHoliday){
+    var pc=S.data.prevCounts||{}, mx=0, top=[];
+    S.data.order.forEach(function(o){ var c=pc[o.name]||0; if(c>mx){mx=c;top=[o.name];}
+      else if(c===mx && c>0) top.push(o.name); });
+    var mineCnt = pc[S.me]||0;
+    if(mx>0 && mineCnt<mx)
+      w.push('<b>4 天以上連假</b>：規則為優先由前三個月排班最多者填寫。目前最多為 '+
+             top.join('、')+'（'+mx+' 班），你 '+mineCnt+' 班。');
+  }
+
+  var dl=deadline();
+  if(S.data.today > dl.dueIso)
+    w.push('已超過 '+dl.due+' 的完成期限，請一併知會'+contact()+'。');
+
+  return w;
+}
+
+/* ===================== 畫面 ===================== */
+function render(){
+  var d=S.data; if(!d) return;
+  syncMonthSelect(); fillAdminSelects();
+  $('prevMonths').textContent = (d.prevMonths||[]).join('、') || '無資料';
+
+  var t=turnOf(), mine=myShifts(), dl=deadline(), mr=meRow(), myPos=-1;
+  d.order.forEach(function(o,i){ if(o.name===S.me) myPos=i; });
+
+  /* ---- 橫幅：一眼看出現在該做什麼 ---- */
+  var bn=$('banner'), h='', cls='', act='';
+  if(S.editOpen){
+    cls='edit';
+    h='<div><b>🛠 編輯開放日模式</b><br><span style="font-size:13.5px">'+
+      '點月曆的格子切換<b>開放 ／ X</b>，改動立刻寫回試算表。'+
+      '已經有人填班的格子不能關，要先取消那一班。</span></div>'+
+      '<div class="push"><button class="btn" id="bnEditDone">結束編輯</button></div>';
+  } else if(S.lock && S.lock.locked && !S.perms.manage){
+    h='';   // 電腦版看頁首小標、手機版看班表下方的收折提示，這裡不佔版面
+  } else if(S.readOnly){
+    cls='ro';
+    h='<div><b>👁 '+S.me+'（不參與排班）</b><br><span style="font-size:13.5px">'+
+      '可以查看所有月份的班表與順位，不能填班或交棒'+(S.canAdmin?'；被授權的後臺功能在最下方':'')+'。</span></div>';
+  } else if(!S.me){
+    h='<div><b>👋 載入中…</b></div>';
+  } else if(S.viewOnly){
+    cls='ro';
+    h='<div><b>👁 目前只能查看</b></div>';
+  } else if(!t){
+    h='';                    // 全部完成的訊息改在順位面板顯示，這裡不再佔一整條
+  } else if(t.name===S.me){
+    cls='you';
+    act='<button class="btn turn actbtn" data-act="done">'+
+        (mine.length? '我填好了，換下一位' : '我不排，換下一位')+'</button>';
+    h='<div style="width:100%"><div class="bline"><b>🔔 現在輪到你了</b>'+act+'</div>'+
+      '<span class="bdesc" style="font-size:13.5px">'+
+      (mine.length? '你已填 '+mine.length+' 班，確認無誤就按「換下一位」交棒。'
+                  : '直接點班表上的空格就會填入你的名字；不排班也請按「我不排，換下一位」。')+
+      '</span></div>';
+  } else {
+    if(mr && mr.done){
+      act='<button class="btn ghost actbtn" data-act="undone">我還要改</button>';
+      cls='monly';   // 已完成時電腦版沒東西好講，整條橫幅在電腦版收起來
+    }
+    h='<div style="width:100%"><div class="bline"><b class="bttl">目前輪到 '+t.seq+'　'+t.name+'</b>'+act+'</div>'+
+      (mr && mr.done ? '' :
+        '<span class="bdesc" style="font-size:13.5px;color:var(--sub)">你排第 '+(myPos+1)+
+        ' 位，還沒輪到。可先看班表，或與前順位藥師協調代壓。</span>')+
+      '</div>';
+  }
+  var lk = !!(S.lock && S.lock.locked);
+  $('lockChip').style.display = lk ? '' : 'none';
+  $('lockNote').style.display = lk ? '' : 'none';
+  if(lk){
+    $('lockChip').textContent =
+      '🔒 ' + S.lock.label + '已鎖定 · ' + S.lock.until.substring(5).replace('-','/') + '解除';
+    $('lockNoteTitle').textContent = '🔒 ' + S.lock.label + ' 班表已鎖定';
+    $('lockNoteBody').innerHTML =
+      '排班已經定案，目前只能查看、不能填寫或修改（各月份都查得到）。<br>' +
+      S.lock.until + ' 起自動解除，屆時可以開始填下一個月。';
+  }
+
+  bn.className='banner '+cls; bn.innerHTML=h;
+  bn.style.display = h ? '' : 'none';
+  if($('actSlot')) $('actSlot').innerHTML = act;   // 電腦版：同一顆鈕放頁首最右
+  if($('bnEditDone')) $('bnEditDone').onclick=function(){ S.editOpen=false; render(); };
+
+  /* ---- 資訊列 ---- */
+  var openCnt=d.days.filter(function(x){return x.open;}).length;
+  var slotCnt=0, takenCnt=0;
+  d.days.forEach(function(x){
+    if(!x.open) return;
+    if(!x.amClosed){ slotCnt++; if(x.am) takenCnt++; }
+    if(!x.pmClosed){ slotCnt++; if(x.pm) takenCnt++; }
+  });
+  var doneCnt=d.order.filter(function(o){return o.done;}).length;
+  var hideMeta = !!(S.lock && S.lock.locked);   // 鎖定期間這排數字沒意義，管理者也一起收起來
+  $('meta').style.display = hideMeta ? 'none' : '';
+  $('meta').innerHTML = hideMeta ? '' :
+    '<span>可排班日 <b>'+openCnt+'</b> 天</span>'+
+    '<span>已填 <b>'+takenCnt+'</b>／'+slotCnt+' 班</span>'+
+    '<span>順位完成 <b>'+doneCnt+'</b>／'+d.order.length+' 人</span>'+
+    '<span>公布 '+dl.open+'</span>'+
+    '<span>完成期限 <b>'+dl.due+'</b></span>'+
+    (S.me? '<span>我本月 <b>'+mine.length+'</b> 班</span>':'');
+  // 橫幅或統計列收起來時，班表別貼著頁首（要等 meta 決定完才判斷）
+  $('mainGrid').classList.toggle('topgap', !h || hideMeta);
+
+  /* ---- 注意事項 ---- */
+  if(d.notes){ $('notesCard').style.display=''; $('notes').textContent=d.notes; }
+  else $('notesCard').style.display='none';
+
+  /* ---- 月曆（比照試算表：每週三列） ---- */
+  var weeks=[], cur=[];
+  d.days.forEach(function(x){
+    if(x.wd===0 && cur.length){ weeks.push(cur); cur=[]; }
+    cur.push(x);
+  });
+  if(cur.length) weeks.push(cur);
+  $('calBody').innerHTML = weeks.map(function(wk){
+    var dr='<tr class="dates"><td class="lab" style="background:#e7ecf0"></td>'+
+      wk.map(function(x){
+        if(!x.inMonth && !x.open) return '<td style="background:#f1f3f5"></td>';
+        var c=(x.iso===d.today?' today':'')+((x.wd===0||x.longHoliday)?' hol':'');
+        return '<td class="'+c.trim()+'">'+x.iso.substring(5).replace('-','/')+
+          (x.longHoliday?'<span class="lh">連假</span>':'')+'</td>';
+      }).join('')+'</tr>';
+    var sr=['am','pm'].map(function(sh){
+      return '<tr class="shift"><td class="lab">'+shLabel(sh)+'<small>'+shHours(sh)+'</small>'+'</td>'+
+        wk.map(function(x){
+          if(!x.inMonth && !x.open) return '<td style="background:#f1f3f5"></td>';
+          // 早晚班要各看各的 X：只清掉其中一格時，另一格仍要顯示為不開放
+          var closed = (!x.open || x[sh+'Closed']);
+          if(S.editOpen && x.inMonth) return '<td class="blank">'+otogBtn(x,sh,closed)+'</td>';
+          if(closed) return '<td class="closed">X</td>';
+          return '<td class="blank">'+slotBtn(x,sh)+'</td>';
+        }).join('')+'</tr>';
+    }).join('');
+    return dr+sr;
+  }).join('');
+
+  /* ---- 手機版可排班日卡片 ---- */
+  var listDays = d.days.filter(function(x){ return S.editOpen ? x.inMonth : x.open; });
+  $('dayList').innerHTML = listDays.map(function(x){
+    return '<div class="dayrow"><div class="dhead"><span>'+
+      (x.iso.substring(5).replace('-','/'))+'（'+WD[x.wd]+'）</span>'+
+      (x.longHoliday?'<span style="font-size:12px;color:var(--warn)">4 天以上連假</span>':'')+
+      '</div><div class="cols">'+
+      '<div class="cw">'+mobBtn(x,'am', !x.open||x.amClosed)+'</div>'+
+      '<div class="cw">'+mobBtn(x,'pm', !x.open||x.pmClosed)+'</div>'+
+      '</div></div>';
+  }).join('') || '<div style="color:var(--sub);font-size:14px">本月尚未開放任何可排班日。</div>';
+
+  /* ---- 順位面板 ---- */
+  var pc=d.prevCounts||{};
+  $('rankSummary').textContent = '\u3000' + (t ? '輪到 '+t.seq+' '+t.name : '全部完成') +
+    '\u3000' + doneCnt + '/' + d.order.length;
+  $('rankDone').textContent = t ? '' : '✓ 本月順位全部完成';
+  $('rankList').innerHTML = d.order.map(function(o){
+    var isTurn = t && o.name===t.name;
+    var cls = o.done ? 'done' : (isTurn ? 'turn' : 'wait');
+    if(o.name===S.me) cls += ' me';
+    var ico = o.done ? '✓' : (isTurn ? '目前輪到' : '○');
+    var cnt = d.days.filter(function(x){return x.am===o.name||x.pm===o.name;}).length;
+    return '<li class="'+cls+'"><span class="seq">'+o.seq+'</span>'+
+      '<span class="nm">'+o.name+'</span>'+
+      '<span style="font-size:11px;opacity:.7">'+cnt+'／'+(pc[o.name]||0)+'</span>'+
+      '<span class="ico'+(isTurn&&!o.done?' turnlbl':'')+'">'+ico+'</span></li>';
+  }).join('');
+
+  if($('whoName')) $('whoName').textContent = S.me || '—';
+
+  /* ---- 管理下拉 ---- */
+  var opts = d.order.map(function(o,i){
+    return '<option value="'+o.name+'">'+(i+1)+'. '+o.seq+' '+o.name+
+           (o.done?'（已完成）':'')+'</option>'; }).join('');
+  $('skipName').innerHTML = opts;
+  $('resetName').innerHTML = d.order.map(function(o){
+    return '<option value="'+o.name+'">'+o.name+'</option>'; }).join('');
+  $('adminNotes').value = d.notes||'';
+}
+
+/* ===================== 登入 ===================== */
+var PWATTR = ' inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="off"';
+function showLogin(msg){
+  S.token=''; S.me=''; S.data=null;
+  try{ localStorage.removeItem('ucc_tok'); }catch(e){}
+  $('app').style.display='none';
+  $('picker').style.display='none';
+  $('login').style.display='';
+  if(msg){ $('loginMsg').textContent=msg; $('loginMsg').style.display=''; }
+  else { $('loginMsg').style.display='none'; }
+}
+function afterLogin(r){
+  S.token=r.token; S.me=r.name; S.isDefaultPw=!!r.isDefault; S.readOnly=!!r.readOnly;
+  try{ localStorage.setItem('ucc_tok', r.token); }catch(e){}
+  $('login').style.display='none';
+  $('app').style.display='';
+  $('picker').style.display='';
+  $('whoName').textContent=S.me;
+  $('pwTip').style.display = S.isDefaultPw ? '' : 'none';
+  loadMonth(S.want || (S.boot && S.boot.months.length ? S.boot.months[0].name : ''));
+}
+var loggingIn=false, lastFailPw=null;
+function doLogin(){
+  if(loggingIn) return;                       // 防止 blur 與按鈕同時觸發送兩次
+  var n=$('loginSeq').value, p=$('loginPw').value;
+  if(!n){ $('loginMsg').textContent='請先選擇使用者'; $('loginMsg').style.display=''; return; }
+  loggingIn=true; busy(true);
+  api('login', {seq:n, pw:p}).then(function(r){
+    loggingIn=false; busy(false);
+    if(!r || !r.ok){
+      lastFailPw=p;                           // 同一組錯的密碼不再自動重送
+      $('loginMsg').textContent=(r&&r.msg)?r.msg:'登入失敗'; $('loginMsg').style.display=''; return;
+    }
+    $('loginPw').value=''; lastFailPw=null;
+    afterLogin(r);
+  }).catch(function(e){ loggingIn=false; busy(false);
+    $('loginMsg').textContent='連線失敗：'+((e&&e.message)?e.message:e); $('loginMsg').style.display=''; });
+}
+
+/* 手機鍵盤按「完成」只會讓欄位失焦、不會送出 Enter，所以改用 blur 自動登入 */
+function maybeAutoLogin(){
+  var v=$('loginPw').value;
+  if(!$('loginSeq').value) return;
+  if(!/^[0-9]{4,6}$/.test(v)) return;
+  if(v===lastFailPw) return;
+  doLogin();
+}
+function openChangePw(){
+  modal('修改密碼',
+    '<p style="font-size:13px;color:var(--sub);margin:0">密碼只存加密後的雜湊值，系統查不出原文；忘記只能請'+contact()+'重設。</p>'+
+    '<label class="lb">目前密碼</label><input type="password" id="pwOld" style="width:100%"'+PWATTR+'>'+
+    '<label class="lb">新密碼（4~6 位數字）</label><input type="password" id="pwNew" style="width:100%"'+PWATTR+'>'+
+    '<label class="lb">再輸入一次</label><input type="password" id="pwNew2" style="width:100%"'+PWATTR+'>'+
+    '<div class="err" id="pwMsg" style="display:none"></div>',
+    '確定修改', pwSubmit);
+}
+function pwSubmit(){
+  function err(m){ $('pwMsg').textContent=m; $('pwMsg').style.display=''; }
+  var o=$('pwOld').value, a=$('pwNew').value, b=$('pwNew2').value;
+  if(a!==b) return err('兩次輸入的新密碼不一樣');
+  if(!/^[0-9]{4,6}$/.test(a)) return err('新密碼請設 4~6 位數字');
+  busy(true);
+  api('changePassword', {token:S.token, oldPw:o, newPw:a}).then(function(r){
+    busy(false);
+    if(!r || !r.ok){ if(r&&r.needLogin){ closeModal(); showLogin(r.msg); return; } return err((r&&r.msg)||'修改失敗'); }
+    closeModal(); S.isDefaultPw=false; $('pwTip').style.display='none'; toast('密碼已更新');
+  }).catch(function(e){ busy(false); err('連線失敗：'+((e&&e.message)?e.message:e)); });
+}
+pwSubmit.keepOpen = true;
+
+/* 手機版格子：早班☀／晚班☾ 直接畫在按鈕裡，省掉一整行時間文字，一頁能看到更多天 */
+function mobBtn(x, shift, closed){
+  var am = (shift==='am');
+  var ic = '<span class="ic '+shift+'">'+(am?'☀':'☾')+'</span>';
+  var lbl = shLabel(shift);
+  if(S.editOpen && x.inMonth) return otogBtn(x, shift, closed);
+  if(closed) return '<div class="slotx">'+ic+'X</div>';
+  var name = x[shift];
+  if(S.viewOnly) return '<button class="slot '+(name?'taken':'ro')+'" disabled>'+ic+(name||lbl)+'</button>';
+  if(name) return '<button class="slot '+(name===S.me?'mine':'taken')+'" data-iso="'+x.iso+
+                  '" data-shift="'+shift+'"'+(name!==S.me?' disabled':'')+'>'+ic+name+'</button>';
+  return '<button class="slot" data-iso="'+x.iso+'" data-shift="'+shift+'">'+ic+lbl+'</button>';
+}
+
+/* 編輯開放日模式下的格子：切換該班別開放與否 */
+function otogBtn(x, shift, closed){
+  var name = x[shift];
+  if(name) return '<button class="slot taken" disabled title="已有人填班，不能關閉">'+name+'</button>';
+  return '<button class="slot otog '+(closed?'off':'on')+'" data-iso="'+x.iso+
+         '" data-shift="'+shift+'" data-to="'+(closed?'1':'0')+'">'+
+         (closed?'X → 開放':'開放 → X')+'</button>';
+}
+
+function slotBtn(x, shift){
+  var name=x[shift];
+  if(S.viewOnly) return '<button class="slot '+(name?'taken':'ro')+'" disabled>'+(name||'—')+'</button>';
+  var cls='slot', extra='';
+  if(name){ cls += (name===S.me ? ' mine' : ' taken'); }
+  else { cls += ' empty'; extra=' data-me="'+(S.me||'填入')+'"'; }
+  return '<button class="'+cls+'" data-iso="'+x.iso+'" data-shift="'+shift+'"'+extra+
+         (name && name!==S.me ? ' disabled' : '')+'>'+(name||'')+'</button>';
+}
+
+/* ===================== 互動：一鍵填、一鍵取消、可復原 ===================== */
+function onSlot(e){
+  if(!e.target.closest) return;
+  var ab=e.target.closest('.actbtn');
+  if(ab){ toggleDone(ab.getAttribute('data-act')==='done'); return; }
+  var t=e.target.closest('.otog');
+  if(t && !t.disabled){
+    var toOpen = t.dataset.to==='1';
+    var lbl = t.dataset.iso.substring(5).replace('-','/')+' '+shLabel(t.dataset.shift);
+    call('setSlotOpen', {month:S.month, iso:t.dataset.iso, shift:t.dataset.shift,
+      open:toOpen, token:S.token},
+      (toOpen?'已開放 ':'已關閉 ')+lbl, '復原', function(){
+        call('setSlotOpen', {month:S.month, iso:t.dataset.iso, shift:t.dataset.shift,
+          open:!toOpen, token:S.token}, (toOpen?'已關閉 ':'已開放 ')+lbl);
+      });
+    return;
+  }
+  var b=e.target.closest('.slot');
+  if(!b||b.disabled) return;
+  if(S.viewOnly){
+    toast(S.readOnly ? '此帳號不參與排班，不能填寫或修改'
+                     : (S.lock.label+' 班表已鎖定，'+S.lock.until+' 起自動解除')); return; }
+  if(!S.me){ toast('請先在上方「我是」選擇你的姓名'); $('selName').focus(); return; }
+  var iso=b.dataset.iso, shift=b.dataset.shift;
+  var day=null; S.data.days.forEach(function(d){ if(d.iso===iso) day=d; });
+  var label=iso.substring(5).replace('-','/')+'（'+WD[day.wd]+'）'+shLabel(shift);
+
+  if(day[shift]===S.me){                       // 取消：直接做，可復原
+    call('cancelShift', {month:S.month, iso:iso, shift:shift, name:S.me, token:S.token},
+      '已取消 '+label, '復原', function(){
+        call('submitShift', {month:S.month, iso:iso, shift:shift, name:S.me, token:S.token}, '已填回 '+label);
+      });
+    return;
+  }
+
+  var w=checkRules(iso, shift);
+  if(!w.length){                               // 沒有違規 → 一鍵直接填
+    call('submitShift', {month:S.month, iso:iso, shift:shift, name:S.me, token:S.token},
+      '已填入 '+label+'　'+S.me, '復原', function(){
+        call('cancelShift', {month:S.month, iso:iso, shift:shift, name:S.me, token:S.token}, '已取消 '+label);
+      });
+    return;
+  }
+  modal('這一班與規則有 '+w.length+' 項不符',
+    '<p><b>'+label+'</b>　填表人：'+S.me+'</p><div class="warns"><ul>'+
+    w.map(function(x){return '<li>'+x+'</li>';}).join('')+'</ul></div>'+
+    '<p style="font-size:13px;color:var(--sub)">規則不會擋你，但送出後請自行與'+contact()+'協調。</p>',
+    '我了解，仍要填', function(){
+      call('submitShift', {month:S.month, iso:iso, shift:shift, name:S.me, token:S.token,
+        warnings:'警示 '+w.length+' 項'}, '已填入 '+label+'　'+S.me, '復原', function(){
+          call('cancelShift', {month:S.month, iso:iso, shift:shift, name:S.me, token:S.token}, '已取消 '+label);
+        });
+    });
+}
+
+function toggleDone(done){
+  if(!S.me) return;
+  if(S.viewOnly){ toast(S.readOnly ? '此帳號不參與排班' : '班表已鎖定'); return; }
+  var mine=myShifts(), nxt=null, idx=-1;
+  S.data.order.forEach(function(o,i){ if(o.name===S.me) idx=i; });
+  for(var i=idx+1;i<S.data.order.length && !nxt;i++) if(!S.data.order[i].done) nxt=S.data.order[i];
+  var msg = done ? (nxt ? '已交棒，下一位是 '+nxt.seq+'　'+nxt.name : '已完成，你是最後一位')
+                 : '已取回順位，可以繼續改';
+  call('setDone', {month:S.month, name:S.me, done:done, token:S.token}, msg, '復原', function(){
+    call('setDone', {month:S.month, name:S.me, done:!done, token:S.token}, done?'已取回順位':'已重新交棒');
+  });
+}
+
+function modal(title, html, okText, fn){
+  $('mTitle').textContent=title; $('mBody').innerHTML=html;
+  $('mOk').textContent=okText; S.pending=fn;
+  $('mCancel').style.display = fn ? '' : 'none';
+  $('mask').classList.add('on');
+}
+function closeModal(){ $('mask').classList.remove('on'); S.pending=null; }
+
+function call(fn, arg, okMsg, actLabel, actFn){
+  busy(true);
+  api(fn, arg).then(function(r){
+    busy(false);
+    if(!r || r.ok===false){
+      if(r && r.needLogin){ showLogin(r.msg||'登入已過期，請重新登入'); return; }
+      toast(r&&r.msg?r.msg:'操作失敗'); if(r&&r.msg) loadMonth(S.month); return;
+    }
+    if(r.data){ if(r.data.name) S.cache[r.data.name]=r.data; setData(r.data); }
+    toast(okMsg||'已更新', actLabel, actFn);
+  }).catch(function(e){ busy(false); toast('連線失敗：'+(e&&e.message?e.message:e)); });
+}
+
+function applyMonth(d, m){
+  if(d.viewer){
+    S.me=d.viewer.name; S.readOnly=!!d.viewer.readOnly; S.isDefaultPw=!!d.viewer.isDefaultPw;
+    S.canAdmin=!!d.viewer.canAdmin; S.isSuper=!!d.viewer.isSuper; S.perms=d.viewer.perms||{};
+    if(d.viewer.defaultPw) $('pwDefault').textContent = d.viewer.defaultPw;
+    $('admCard').style.display = S.canAdmin ? '' : 'none';
+    syncSubs();
+    if(!S.perms.openday && S.editOpen){ S.editOpen=false; }
+    $('whoName').textContent=S.me;
+    $('pwTip').style.display = S.isDefaultPw ? '' : 'none';
+  }
+  S.lock = d.lock || null;
+  S.viewOnly = S.readOnly || !!(S.lock && S.lock.locked && !S.perms.manage);
+  S.month = (d.forcedMonth && d.name) ? d.name : m;
+  setData(d);
+}
+
+/* 有快取就先畫出來（體感即時），同時仍去後端抓最新的蓋回去 */
+function loadMonth(m){
+  var cached = S.cache[m];
+  if(cached) applyMonth(cached, m); else busy(true);
+  return api('getMonth', {month:m, token:S.token}).then(function(d){
+    busy(false);
+    if(d && d.needLogin){ showLogin('登入已過期，請重新登入'); return; }
+    if(!d || !d.days){ fatal('讀不到 '+m+' 的資料'); return; }
+    S.cache[d.name || m] = d;
+    applyMonth(d, m);
+    prefetchAround(S.month);
+  }).catch(function(e){ busy(false); fatal('讀取 '+m+' 失敗：'+((e&&e.message)?e.message:e)); });
+}
+
+/* 背景把前後各一個月抓回來放著，切換月份就不用等 */
+function prefetchAround(m){
+  var b=S.boot; if(!b || !b.months) return;
+  var i=-1; b.months.forEach(function(x,k){ if(x.name===m) i=k; });
+  if(i<0) return;
+  [i-1, i+1].forEach(function(k){
+    var mm = b.months[k] && b.months[k].name;
+    if(!mm || S.cache[mm]) return;
+    api('getMonth', {month:mm, token:S.token}).then(function(d){
+      if(d && d.days) S.cache[d.name || mm] = d;
+    }).catch(function(){});
+  });
+}
+
+/* ===================== 自動同步（多人同時填班用） ===================== */
+var SIG='';
+function sigOf(d){
+  return JSON.stringify([d.days.map(function(x){ return x.am+''+x.pm; }),
+                         d.order.map(function(o){ return o.done?1:0; }), d.notes]);
+}
+function stamp(){
+  var n=new Date();
+  var e=$('syncAt'); if(e) e.textContent=('0'+n.getHours()).slice(-2)+':'+('0'+n.getMinutes()).slice(-2);
+}
+function setData(d){ S.data=d; SIG=sigOf(d); render(); stamp(); }
+
+/** 每 60 秒抓一次；分頁在背景、或正在看確認視窗時不打擾，資料沒變就不重畫 */
+function autoRefresh(){
+  if(document.hidden || !S.month) return;
+  if($('mask').classList.contains('on')) return;
+  api('getMonth', {month:S.month, token:S.token}).then(function(d){
+    if(!d || d.needLogin || d.name!==S.month) return;
+    if(sigOf(d)!==SIG){ S.cache[d.name]=d; setData(d); } else stamp();
+  }).catch(function(){ /* 暫時連不上就下次再試，不干擾使用者 */ });
+}
+setInterval(autoRefresh, 60000);
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) autoRefresh(); });
+
+
+/* 連不上後端時，把真正的錯誤留在畫面上（不要用 2 秒就消失的提示條） */
+function fatal(msg){
+  var bn=$('banner');
+  bn.className='banner err';
+  bn.innerHTML='<div><b>⚠ 連不上班表</b><br>'+
+    '<span style="font-size:13.5px">錯誤訊息：<code>'+
+    String(msg).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</code></span><br>'+
+    '<span style="font-size:12.5px">請把這行訊息連同你用的網址告訴'+contact()+'。</span></div>';
+  $('meta').innerHTML='';
+  $('calBody').innerHTML='';
+  $('dayList').innerHTML='';
+  $('rankList').innerHTML='';
+}
+
+/* 月份清單是新→舊，所以「上個月」是往後一格 */
+function stepMonth(dir){
+  var sel=$('selMonth'), i=sel.selectedIndex+dir;
+  if(i<0 || i>=sel.options.length) return;
+  sel.selectedIndex=i; loadMonth(sel.value);
+}
+
+/* 月份下拉與上/下月鈕永遠可用——鎖定只擋編輯，不擋查閱 */
+function syncMonthSelect(){
+  var b=S.boot; if(!b) return;
+  $('selMonth').innerHTML=b.months.map(function(m){
+    return '<option value="'+m.name+'">'+m.label+'</option>'; }).join('');
+  if(S.month) $('selMonth').value=S.month;
+  var i=$('selMonth').selectedIndex, n=$('selMonth').options.length;
+  $('btnPrev').disabled = i>=n-1;
+  $('btnNext').disabled = i<=0;
+}
+
+/* 後臺分項：有那一項權限才顯示；權限授權只有超級管理者看得到 */
+function syncSubs(){
+  var subs=document.querySelectorAll('#admCard details.sub[data-perm]');
+  for(var i=0;i<subs.length;i++){
+    var k=subs[i].getAttribute('data-perm');
+    subs[i].style.display = (k==='grant' ? S.isSuper : !!S.perms[k]) ? '' : 'none';
+  }
+}
+
+/* 名單（增減人員、權限授權共用），每次展開時重抓 */
+function loadUsers(cb){
+  api('adminUsers', {token:S.token}).then(function(r){
+    if(!r || !r.ok){ if(r&&r.needLogin){ showLogin(r.msg); return; } toast(r&&r.msg?r.msg:'讀取名單失敗'); return; }
+    S.users=r; renderUsers(); if(cb) cb(r);
+  }).catch(function(e){ toast('連線失敗：'+(e&&e.message?e.message:e)); });
+}
+function renderUsers(){
+  var r=S.users; if(!r) return;
+  $('rosterList').innerHTML = r.rows.map(function(u){
+    var tag = u.superAdmin ? '超級管理者' : (u.staff ? '不參與排班' : '');
+    var rm = (u.superAdmin || u.staff) ? '' :
+      '<button class="btn ghost rrm" data-name="'+u.name+'">移除</button>';
+    return '<div class="rrow"><span class="rseq">'+u.seq+'</span><span class="rnm">'+u.name+'</span>'+
+           (tag?'<span class="rtag">'+tag+'</span>':'')+rm+'</div>';
+  }).join('') || '（名單是空的）';
+  if(r.isSuper){
+    var cur=$('permUser').value;
+    $('permUser').innerHTML = r.rows.filter(function(u){ return !u.superAdmin; }).map(function(u){
+      return '<option value="'+u.name+'">'+u.seq+'．'+u.name+(u.staff?'（不參與排班）':'')+'</option>'; }).join('');
+    if(cur) $('permUser').value=cur;
+    renderPermBoxes();
+  }
+}
+function renderPermBoxes(){
+  var r=S.users; if(!r || !r.isSuper) return;
+  var n=$('permUser').value, u=null;
+  r.rows.forEach(function(x){ if(x.name===n) u=x; });
+  var has={}; ((u&&u.perms)||[]).forEach(function(k){ has[k]=true; });
+  $('permBoxes').innerHTML = r.keys.map(function(k){
+    return '<label><input type="checkbox" value="'+k.k+'"'+(has[k.k]?' checked':'')+'> '+k.label+'</label>'; }).join('');
+  $('permUserNote').textContent = u ? ('目前已開放 '+((u.perms||[]).length)+' 項') : '';
+}
+
+/* 後臺各個月份下拉 */
+function fillAdminSelects(){
+  var b=S.boot; if(!b || !S.canAdmin) return;
+  var opts=b.months.map(function(m){
+    return '<option value="'+m.name+'">'+m.label+'</option>'; }).join('');
+  if($('lockMonth').innerHTML!==opts){
+    $('lockMonth').innerHTML=opts;
+    $('lockMonth').value = (S.lock && S.lock.locked) ? S.lock.month
+                         : (b.defaultMonth || (b.months[0]||{}).name);
+  }
+  if($('notesMonth').innerHTML!==opts){
+    $('notesMonth').innerHTML=opts;
+    S.notesMonth = S.month || b.defaultMonth || (b.months[0]||{}).name;
+    $('notesMonth').value = S.notesMonth;
+  }
+  if(!$('tgtRoc').options.length){
+    var now=S.boot.today ? parseInt(S.boot.today.substring(0,4),10)-1911 : 115, o='';
+    for(var y=now;y<=now+3;y++) o+='<option value="'+y+'">'+y+'</option>';
+    $('tgtRoc').innerHTML=o;
+    var mo=''; for(var m2=1;m2<=12;m2++) mo+='<option value="'+m2+'">'+m2+'</option>';
+    $('tgtMon').innerHTML=mo; $('tgtRoc').value=now+1; $('tgtMon').value=6;
+  }
+  var st=S.lock||{};
+  $('lockState').className = 'lockstate'+(st.locked?' on':'');
+  $('lockState').textContent = st.locked
+    ? '目前鎖定中：'+st.label+'　（'+st.until+' 起自動解除）'
+    : '目前未鎖定，大家都可以填班。';
+  $('btnUnlock').style.display = st.locked ? '' : 'none';
+}
+
+/* ===================== 啟動 ===================== */
+document.addEventListener('click', onSlot);
+$('mCancel').onclick=closeModal;
+$('mask').onclick=function(e){ if(e.target===$('mask')) closeModal(); };
+$('mOk').onclick=function(){
+  var f=S.pending;
+  if(f && f.keepOpen){ f(); return; }   // 自己負責驗證與關閉（例如修改密碼）
+  closeModal(); if(f) f();
+};
+$('selMonth').onchange=function(){ loadMonth(this.value); };
+$('btnLogin').onclick=doLogin;
+$('loginPw').onkeydown=function(e){ if(e.key==='Enter'||e.keyCode===13){ this.blur(); doLogin(); } };
+$('loginPw').onblur=function(){ setTimeout(maybeAutoLogin, 60); };
+$('loginPw').oninput=function(){ if(this.value!==lastFailPw) $('loginMsg').style.display='none'; };
+$('btnChgPw').onclick=openChangePw;
+$('btnChgPw2').onclick=openChangePw;
+$('btnLogout').onclick=function(){ showLogin('已登出'); };
+$('btnResetPw').onclick=function(){
+  var n=$('resetName').value;
+  modal('重設密碼', '<p>將「'+n+'」的密碼重設為預設值 <b>'+$('pwDefault').textContent+'</b>，請通知本人重新登入並自行修改。</p>',
+    '確定重設', function(){
+      api('adminResetPw', {token:S.token, name:n}).then(function(r){
+        toast(r&&r.msg?r.msg:'完成'); }); });
+};
+$('btnPwStatus').onclick=function(){
+  api('adminPwStatus', {token:S.token}).then(function(r){
+    if(!r||!r.ok){ toast(r&&r.msg?r.msg:'查詢失敗'); return; }
+    var no=r.rows.filter(function(x){return x.isDefault;}).map(function(x){return x.name;});
+    var lk=r.rows.filter(function(x){return x.lockedMin>0;})
+                 .map(function(x){return x.name+'（剩 '+x.lockedMin+' 分）';});
+    modal('密碼狀態',
+      '<p>共 '+r.rows.length+' 人，其中 <b>'+no.length+'</b> 人還在用預設密碼：</p>'+
+      '<p style="color:#8c1d18">'+(no.join('、')||'（沒有，全部都改過了）')+'</p>'+
+      (lk.length
+        ? '<p style="margin-top:12px">因連續輸錯密碼而<b>登入鎖定中</b>：</p>'+
+          '<p style="color:#8c1d18">'+lk.join('、')+'</p>'+
+          '<p style="font-size:13px;color:var(--sub)">替他重設密碼會一併解鎖，不必等時間到。</p>'
+        : '<p style="margin-top:12px;font-size:13px;color:var(--sub)">目前沒有人被登入鎖定。</p>'),
+      '關閉', null);
+  });
+};
+$('btnReload').onclick=function(){ loadMonth(S.month); };
+/* 增減人員、權限授權：展開分項時才抓名單 */
+(function(){
+  var subs=document.querySelectorAll('#admCard details.sub[data-perm]');
+  for(var i=0;i<subs.length;i++){
+    var k=subs[i].getAttribute('data-perm');
+    if(k==='roster'||k==='grant') subs[i].addEventListener('toggle', function(){ if(this.open) loadUsers(); });
+  }
+})();
+$('btnRosterAdd').onclick=function(){
+  var n=$('rosterNew').value.trim();
+  if(!n){ toast('請輸入姓名'); return; }
+  modal('加入順位', '<p>將「<b>'+n+'</b>」加到順位最後，套用到本月起所有已建立的月份分頁。</p>'+
+    '<p style="font-size:13px;color:var(--sub)">加入後本人可用預設密碼登入。</p>', '確定加入', function(){
+      busy(true);
+      api('rosterAdd', {token:S.token, name:n}).then(function(r){
+        busy(false); toast(r&&r.msg?r.msg:'完成');
+        if(r&&r.ok){ $('rosterNew').value=''; S.cache={}; boot(); }
+      }).catch(function(e){ busy(false); toast('連線失敗：'+(e&&e.message?e.message:e)); });
+    });
+};
+$('rosterList').onclick=function(e){
+  var b=e.target.closest && e.target.closest('.rrm'); if(!b) return;
+  var n=b.getAttribute('data-name');
+  modal('移除人員', '<p>將「<b>'+n+'</b>」移出順位（本月起所有已建立的月份分頁），並清除他的密碼與授權。</p>'+
+    '<p style="font-size:13px;color:var(--sub)">歷史月份的班表與紀錄不會動。若他還有班，會先擋下來。</p>', '確定移除', function(){
+      busy(true);
+      api('rosterRemove', {token:S.token, name:n}).then(function(r){
+        busy(false); toast(r&&r.msg?r.msg:'完成');
+        if(r&&r.ok){ S.cache={}; boot(); }
+      }).catch(function(e){ busy(false); toast('連線失敗：'+(e&&e.message?e.message:e)); });
+    });
+};
+$('permUser').onchange=renderPermBoxes;
+$('btnPermSave').onclick=function(){
+  var n=$('permUser').value; if(!n){ toast('請先選人'); return; }
+  var ks=[]; var cbs=$('permBoxes').querySelectorAll('input[type=checkbox]');
+  for(var i=0;i<cbs.length;i++) if(cbs[i].checked) ks.push(cbs[i].value);
+  busy(true);
+  api('setPerms', {token:S.token, name:n, perms:ks}).then(function(r){
+    busy(false); toast(r&&r.msg?r.msg:'完成');
+    if(r&&r.ok) loadUsers();
+  }).catch(function(e){ busy(false); toast('連線失敗：'+(e&&e.message?e.message:e)); });
+};
+$('btnEditOpen').onclick=function(){
+  S.editOpen = !S.editOpen;
+  render();
+  if(S.editOpen){ toast('編輯開放日：點月曆格子切換 開放／X'); try{ window.scrollTo(0,0); }catch(e){} }
+};
+$('lnkLog').onclick=function(){
+  modal('更新紀錄', '<ul class="cl">'+CHANGELOG.map(function(c){
+    return '<li><div class="h">'+c.d+'　'+c.t+'<span class="v">'+c.v+'</span></div>'+
+           '<div class="s">'+c.s+'</div></li>'; }).join('')+'</ul>', '關閉', null);
+};
+$('btnSaveNotes').onclick=function(){
+  call('saveNotes', {month:S.notesMonth||S.month, notes:$('adminNotes').value, token:S.token},
+       '注意事項已儲存'); };
+$('notesMonth').onchange=function(){
+  S.notesMonth=this.value;
+  api('getMonth', {month:S.notesMonth, token:S.token}).then(function(d){
+    if(d && !d.needLogin) $('adminNotes').value = d.notes||'';
+  });
+};
+$('btnSkip').onclick=function(){
+  var n=$('skipName').value;
+  modal('標記逾期放棄', '<p>將「'+n+'」標記為完成，順位往下一位遞補。</p>', '確定', function(){
+    call('adminSkip', {month:S.month, name:n, token:S.token}, n+' 已標記完成'); }); };
+$('btnCreate').onclick=function(){
+  modal('建立次月分頁', '<p>會複製最新月份的版型，重寫日期、依可排班日設定填 X，'+
+    '並把排班順位整體往前遞補一位。</p>', '確定建立', function(){
+    busy(true);
+    api('createNextMonth', {token:S.token}).then(function(r){
+      busy(false);
+      if(!r.ok){ toast(r.msg); return; }
+      toast('已建立 '+r.month); boot();
+    });
+  }); };
+
+$('btnLock').onclick=function(){
+  var m=$('lockMonth').value, lbl=$('lockMonth').options[$('lockMonth').selectedIndex].textContent;
+  modal('鎖定班表', '<p>鎖定 <b>'+lbl+'</b> 的班表。</p>'+
+    '<p style="font-size:13px;color:var(--sub)">鎖定後其他人只看得到當月班表、不能異動；'+
+    '到 '+lbl+' 的 1 號自動解除。你自己仍可編輯。</p>', '確定鎖定', function(){
+      api('setLock', {token:S.token, month:m}).then(function(r){
+        toast(r&&r.msg?r.msg:'完成'); if(r&&r.ok) loadMonth(S.month); });
+    });
+};
+$('btnUnlock').onclick=function(){
+  modal('解除鎖定', '<p>解除後大家可以繼續填班。</p>', '確定解除', function(){
+    api('clearLock', {token:S.token}).then(function(r){
+      toast(r&&r.msg?r.msg:'完成'); if(r&&r.ok) loadMonth(S.month); });
+  });
+};
+$('btnPrev').onclick=function(){ stepMonth(1); };
+$('btnNext').onclick=function(){ stepMonth(-1); };
+$('btnCreateThrough').onclick=function(){
+  var roc=$('tgtRoc').value, mo=$('tgtMon').value;
+  modal('連續建立月份分頁',
+    '<p>從目前最新的月份開始，一個月一個月往後建，直到 <b>'+roc+' 年 '+mo+' 月</b>。</p>'+
+    '<p style="font-size:13px;color:var(--sub)">每建一個月，排班順位自動往前遞補一位。'+
+    '可排班日<b>只會自動開放週日</b>，週六與國定假日一律填 X，之後你在試算表上自行調整。</p>',
+    '開始建立', function(){
+      busy(true);
+      api('createMonthsThrough', {token:S.token, roc:Number(roc), month:Number(mo)})
+        .then(function(r){ busy(false); toast(r&&r.msg?r.msg:'完成'); if(r&&r.ok) boot(); })
+        .catch(function(e){ busy(false); toast('失敗：'+((e&&e.message)?e.message:e)); });
+    });
+};
+
+/* 順位面板：電腦版展開、手機版收起。
+   ⚠️ Apps Script 的 sandbox iframe 剛建立時寬度很小，程式一啟動就讀 matchMedia 會誤判成手機版；
+   iframe 之後撐開時 CSS 會跟著變，但 <details> 的 open 不會，所以必須監聽斷點變化補正。 */
+function syncRankOpen(){
+  try{ $('rankCard').open = !window.matchMedia('(max-width:900px)').matches; }
+  catch(e){ $('rankCard').open = true; }
+}
+(function(){
+  syncRankOpen();
+  try{
+    var mq = window.matchMedia('(max-width:900px)');
+    if(mq.addEventListener) mq.addEventListener('change', syncRankOpen);
+    else if(mq.addListener) mq.addListener(syncRankOpen);
+  }catch(e){}
+  // iframe 撐開有時不會觸發 matchMedia change，補一次延遲校正
+  setTimeout(syncRankOpen, 1200);
+})();
+
+function boot(){
+  $('lastUpd').textContent = CHANGELOG.length ? CHANGELOG[0].d : '';
+  $('demoBar').style.display='';
+  try{ S.token = localStorage.getItem('ucc_tok')||''; }catch(e){}
+  api('getBootstrap').then(function(b){
+    S.boot=b;
+    applyUi(b.ui);
+    $('loginSeq').innerHTML = '<option value="">▼ 請選擇使用者</option>' +
+      (b.roster||[]).map(function(r){
+        return '<option value="'+r.seq+'">'+r.label+'</option>'; }).join('');
+    if(!b.months || !b.months.length){
+      var extra = '';
+      if(b.allSheets){
+        extra = '<br><br>腳本開到的試算表是「<b>'+b.ssName+'</b>」，裡面的分頁有：<br>' +
+                b.allSheets.map(function(x){ return '・'+x; }).join('<br>') +
+                '<br><br>月份分頁的名稱必須是「民國年/月」（例如 <code>115/10</code>）或 5 碼數字（<code>11510</code>），' +
+                '多一個空格或多一個字都會被略過。第一次建置可在 Apps Script 編輯器執行 <code>setupSpreadsheet</code>。';
+      }
+      fatal('試算表裡找不到月份分頁。' + extra);
+      return;
+    }
+    // 預設開在「次月」（由後端依今天算），沒有那個分頁才退回最新的一個
+    var want = b.defaultMonth;
+    if(!want || !b.months.some(function(m){ return m.name===want; })) want = b.months[0].name;
+    S.want = want;
+    $('selMonth').value = want;
+    if(S.token){
+      $('app').style.display=''; $('picker').style.display='';
+      loadMonth(want);
+    } else {
+      showLogin();
+    }
+  }).catch(function(e){ fatal((e&&e.message)?e.message:String(e)); });
+}
+boot();
+</script>
+
+</body>
+</html>
