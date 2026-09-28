@@ -511,10 +511,13 @@
             </div></details>
 
             <details class="sub" data-perm="grant"><summary>資料備份</summary><div class="subbody">
-              <div class="row"><button class="btn ghost" id="btnExportJson">匯出全部資料（JSON）</button></div>
+              <div class="row">
+                <button class="btn" id="btnExportJson">匯出並下載（JSON）</button>
+                <a id="expLink" class="btn ghost" style="display:none" download>沒有自動下載？點這裡另存</a>
+              </div>
               <textarea id="expText" rows="4" style="width:100%;margin-top:8px;font-size:12px;display:none" readonly></textarea>
               <div class="hint">含月份、班表、順位、注意事項、可排班日、密碼雜湊與授權：可用來整批搬移到公會網站版，也是完整備份。
-                產生後全選複製、存成 .json 檔。</div>
+                按下後瀏覽器會直接下載 <b>ucc-export-日期.json</b>。</div>
             </div></details>
 
             <details class="sub" data-perm="grant"><summary>權限授權</summary><div class="subbody">
@@ -620,7 +623,7 @@ function saveBrand(vals, okMsg){
 /* 更新紀錄：同一天彙整成一則，新的放最前面 */
 var CHANGELOG = [
   {d:'2026/09/28', v:'v3.10', t:'資料備份匯出',
-   s:'後臺新增「資料備份」：超級管理者可把全部資料匯成 JSON，供完整備份或整批搬移。'},
+   s:'後臺新增「資料備份」：超級管理者一鍵下載全部資料的 JSON，供完整備份或整批搬移到公會網站版。'},
   {d:'2026/09/08', v:'v3.9', t:'權限授權、增減人員、頁首頁尾可編輯',
    s:'後臺新增「權限授權」（逐項開放後臺功能給指定帳號）、「增減人員」（網頁上直接增刪順位）、「頁首頁尾文字」（標題與說明文字後臺可改）；超級管理者移交會務人員帳號；組織設定抽成 Config.gs 並開源。'},
   {d:'2026/09/07', v:'v3.8', t:'個人密碼登入與後臺管理',
@@ -1336,8 +1339,17 @@ $('btnExportJson').onclick=function(){
   api('exportAll', {token:S.token}).then(function(r){
     busy(false);
     if(!r || !r.ok){ toast(r&&r.msg?r.msg:'匯出失敗'); return; }
-    var ta=$('expText'); ta.style.display=''; ta.value=JSON.stringify(r.data); ta.focus(); ta.select();
-    toast('已產生，共 '+r.data.months.length+' 個月份；全選複製後存成 .json');
+    var text=JSON.stringify(r.data), name='ucc-export-'+(S.boot&&S.boot.today?S.boot.today:'now')+'.json';
+    var ok=false;
+    try{
+      var blob=new Blob([text], {type:'application/json;charset=utf-8'}), url=URL.createObjectURL(blob);
+      var a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click();
+      setTimeout(function(){ a.remove(); }, 2000);
+      var lk=$('expLink'); lk.href=url; lk.download=name; lk.style.display='';   // 沙箱擋下自動下載時，這個連結可手動另存
+      ok=true;
+    }catch(e){}
+    if(!ok){ var ta=$('expText'); ta.style.display=''; ta.value=text; ta.focus(); ta.select(); }
+    toast('已匯出 '+r.data.months.length+' 個月份：'+name+(ok?'':'（請全選複製存檔）'));
   }).catch(function(e){ busy(false); toast('連線失敗：'+(e&&e.message?e.message:e)); });
 };
 $('permUser').onchange=renderPermBoxes;
