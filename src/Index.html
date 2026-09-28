@@ -1,4 +1,4 @@
-<!-- UCC 排班系統 — 前端（上線版）v3.9
+<!-- UCC 排班系統 — 前端（上線版）v3.10
      版面比照原試算表：左邊月曆（每週三列：日期／早班／晚班）＋右邊排班順位面板
      ★ 組織名稱、規則、聯絡方式等文字全部由 Config.gs 經 getBootstrap 帶入，此檔不含組織專屬內容。
      ★ 這一份是要貼進 Apps Script 的上線版，直接開檔不會有資料。離線展示請用「離線示範版.html」 -->
@@ -510,6 +510,13 @@
                 存在系統設定裡、優先於 Config.gs；儲存後所有人重新整理即生效。</div>
             </div></details>
 
+            <details class="sub" data-perm="grant"><summary>資料備份</summary><div class="subbody">
+              <div class="row"><button class="btn ghost" id="btnExportJson">匯出全部資料（JSON）</button></div>
+              <textarea id="expText" rows="4" style="width:100%;margin-top:8px;font-size:12px;display:none" readonly></textarea>
+              <div class="hint">含月份、班表、順位、注意事項、可排班日、密碼雜湊與授權：可用來整批搬移到公會網站版，也是完整備份。
+                產生後全選複製、存成 .json 檔。</div>
+            </div></details>
+
             <details class="sub" data-perm="grant"><summary>權限授權</summary><div class="subbody">
               <div class="row">
                 <select id="permUser"></select>
@@ -529,7 +536,7 @@
   </div>
 
   <div class="pfoot">
-    <span id="ftSys">排班系統</span>　<b>v3.9</b><br>
+    <span id="ftSys">排班系統</span>　<b>v3.10</b><br>
     <span class="warn2" id="ftConf"></span><br>
     <a id="lnkLog">更新紀錄</a>　·　最後更新 <span id="lastUpd">—</span><br>
     <span id="ftContact"></span><span id="ftCredit"></span>
@@ -612,6 +619,8 @@ function saveBrand(vals, okMsg){
 
 /* 更新紀錄：同一天彙整成一則，新的放最前面 */
 var CHANGELOG = [
+  {d:'2026/09/28', v:'v3.10', t:'資料備份匯出',
+   s:'後臺新增「資料備份」：超級管理者可把全部資料匯成 JSON，供完整備份或整批搬移。'},
   {d:'2026/09/08', v:'v3.9', t:'權限授權、增減人員、頁首頁尾可編輯',
    s:'後臺新增「權限授權」（逐項開放後臺功能給指定帳號）、「增減人員」（網頁上直接增刪順位）、「頁首頁尾文字」（標題與說明文字後臺可改）；超級管理者移交會務人員帳號；組織設定抽成 Config.gs 並開源。'},
   {d:'2026/09/07', v:'v3.8', t:'個人密碼登入與後臺管理',
@@ -1322,6 +1331,15 @@ $('btnBrandReset').onclick=function(){
     // 送空字串＝與 Config.gs 不同時仍會被存成空白，所以改送「不含該鍵」以外的做法：直接請後端刪除
     saveBrand({__reset:true}, '已還原');
   }); };
+$('btnExportJson').onclick=function(){
+  busy(true);
+  api('exportAll', {token:S.token}).then(function(r){
+    busy(false);
+    if(!r || !r.ok){ toast(r&&r.msg?r.msg:'匯出失敗'); return; }
+    var ta=$('expText'); ta.style.display=''; ta.value=JSON.stringify(r.data); ta.focus(); ta.select();
+    toast('已產生，共 '+r.data.months.length+' 個月份；全選複製後存成 .json');
+  }).catch(function(e){ busy(false); toast('連線失敗：'+(e&&e.message?e.message:e)); });
+};
 $('permUser').onchange=renderPermBoxes;
 $('btnPermSave').onclick=function(){
   var n=$('permUser').value; if(!n){ toast('請先選人'); return; }

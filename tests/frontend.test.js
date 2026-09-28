@@ -81,7 +81,7 @@ run('pharm', [], (w, D) => {
   const ft = T(D, 'ftSys') + '|' + T(D, 'ftConf') + '|' + T(D, 'ftContact') + '|' + T(D, 'ftCredit');
   ok(ft === [UI.systemName, UI.confidentialNote, UI.contactLine, '開源專案：GitHub'].join('|'), '頁尾四段（無組織名、有開源連結）', ft);
   ok(!D.getElementById('ftOrg') && D.querySelector('.pfoot').textContent.indexOf('社團法人') < 0, '頁尾不含組織全名');
-  ok(SRC.indexOf('v3.9') > 0 && D.querySelector('.pfoot b').textContent === 'v3.9', '頁尾版本 v3.9');
+  ok(SRC.indexOf('v3.10') > 0 && D.querySelector('.pfoot b').textContent === 'v3.10', '頁尾版本 v3.10');
   ok(SRC.indexOf('社團法人') < 0 && !/\(\d{2,3}\)\s?\d{3,4}-\d{4}/.test(SRC), '原始碼不含組織名稱或電話（都應來自 Config.gs）');
   ok(D.querySelector('#calBody .shift .lab').innerHTML === '早班<small>0800~1600</small>', '月曆班別標籤由 ui 帶入', D.querySelector('#calBody .shift .lab').innerHTML);
   console.log('\n=== 一般藥師');
@@ -93,7 +93,7 @@ run('pharm', [], (w, D) => {
     console.log('\n=== 超級管理者');
     ok(vis(D2.getElementById('admCard')), '看得到後臺');
     const subs = [...D2.querySelectorAll('#admCard details.sub[data-perm]')];
-    ok(subs.length === 9 && subs.every(vis), '9 個分項全部顯示', subs.map(s => s.getAttribute('data-perm') + (vis(s) ? '' : '✗')));
+    ok(subs.length === 10 && subs.every(vis), '10 個分項全部顯示（含資料備份）', subs.map(s => s.getAttribute('data-perm') + (vis(s) ? '' : '✗')));
     // 展開權限授權 → 抓名單
     const grant = subs.find(s => s.getAttribute('data-perm') === 'grant');
     grant.open = true; grant.dispatchEvent(new w2.Event('toggle'));

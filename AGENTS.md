@@ -39,7 +39,8 @@ Google Apps Script 網頁應用程式：讓一群人依順位輪流填班，資�
 ## 權限模型（v3.9）
 
 - `CFG.ADMIN_NAMES`：超級管理者。全部功能＋唯一能「授權」的人。範本預設是會務人員帳號（管理權跟職務不跟人）。
-- `CFG.STAFF_ACCOUNTS`：不參與排班的帳號。能看、能被授權、不能填班／交棒（`isReadOnly_`）。
+- `CFG.STAFF_ACCOUNTS`：不參與排班的帳號。能看、能被授權、不能替自己填班／交棒（`isReadOnly_`）；有 `manage` 權限時可代填、取消他人的班、代交棒。
+- `exportAll`（超級管理者）：全部資料匯成 JSON（`format: ucc-export-1`），供備份或搬移。
 - 其他人的後臺功能由 `perm_<姓名>`（ScriptProperties，JSON 陣列）決定；鍵在 `PERMS` 常數：
   `lock`、`notes`、`skip`、`create`、`openday`、`resetpw`、`roster`、`manage`、`brand`。
 - 後端每個後臺函式用 `requireAdmin_(payload, '<鍵>')` 守門；`manage` 另外控制取消他人的班、代交棒、鎖定期間仍可改。

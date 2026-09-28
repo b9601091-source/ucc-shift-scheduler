@@ -756,7 +756,9 @@ function getMonthData_(name) {
 function submitShift(payload) {
   var actor = actorOf_(payload);
   if (!actor) return { ok: false, needLogin: true, msg: '登入已過期，請重新登入' };
-  if (isReadOnly_(actor)) return { ok: false, msg: '此帳號不參與排班，不能填寫或修改班表' };
+  // 會務帳號不參與排班：不能填自己；有「代管班表」權限時可替藥師代填
+  if (isReadOnly_(actor) && (payload.name === actor || !can_(actor, 'manage'))) return { ok: false, msg: '此帳號不參與排班，不能填寫或修改班表' };
+  if (isReadOnly_(payload.name)) return { ok: false, msg: '會務帳號不能被排班' };
   var lk = lockBlocks_(actor); if (lk) return lk;
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -783,7 +785,8 @@ function submitShift(payload) {
 function cancelShift(payload) {
   var actor = actorOf_(payload);
   if (!actor) return { ok: false, needLogin: true, msg: '登入已過期，請重新登入' };
-  if (isReadOnly_(actor)) return { ok: false, msg: '此帳號不參與排班，不能填寫或修改班表' };
+  // 會務帳號：只有「代管班表」權限才能取消別人的班
+  if (isReadOnly_(actor) && !can_(actor, 'manage')) return { ok: false, msg: '此帳號不參與排班，不能填寫或修改班表' };
   var lk = lockBlocks_(actor); if (lk) return lk;
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -807,7 +810,8 @@ function cancelShift(payload) {
 function setDone(payload) {
   var actor = actorOf_(payload);
   if (!actor) return { ok: false, needLogin: true, msg: '登入已過期，請重新登入' };
-  if (isReadOnly_(actor)) return { ok: false, msg: '此帳號不參與排班，不能填寫或修改班表' };
+  // 會務帳號不在順位：不能替自己交棒；有「代管班表」權限時可代人交棒
+  if (isReadOnly_(actor) && (payload.name === actor || !can_(actor, 'manage'))) return { ok: false, msg: '此帳號不參與排班，不能填寫或修改班表' };
   var lk = lockBlocks_(actor); if (lk) return lk;
   if (!can_(actor, 'manage') && actor !== payload.name) {
     return { ok: false, msg: '只能替自己交棒；要代人交棒請用後臺管理' };
@@ -1163,6 +1167,48 @@ function rosterRemove(payload) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ============================ 備份匯出 ============================ */
+/**
+ * 全部資料（月份、班表、順位、注意事項、可排班日、密碼雜湊、授權、secret、紀錄）匯成 JSON。
+ * 只有超級管理者能拿；同一格式可匯入 PHP 版做整批搬移，也是完整備份。
+ */
+function exportAll(payload) {
+  var deny = requireSuper_(payload); if (deny) return deny;
+  var months = listMonths_().slice().reverse().map(function (mn) {
+    var p = parseSheet_(mn);
+    return { name: mn,
+      days: p.days.map(function (d) { return { iso: d.iso, inMonth: d.inMonth, amClosed: d.amClosed, pmClosed: d.pmClosed, am: d.am, pm: d.pm }; }),
+      order: p.order.map(function (o) { return { seq: o.seq, name: o.name, done: o.done }; }),
+      notes: p.notes };
+  });
+  var openDays = [];
+  var osh = ss_().getSheetByName('_可排班日');
+  if (osh) {
+    var ov = osh.getDataRange().getValues();
+    for (var i = 1; i < ov.length; i++) {
+      if (!ov[i][0]) continue;
+      openDays.push({ iso: (ov[i][0] instanceof Date) ? iso_(ov[i][0]) : String(ov[i][0]).trim(), open: String(ov[i][1] == null ? '' : ov[i][1]).trim(), note: String(ov[i][2] == null ? '' : ov[i][2]) });
+    }
+  }
+  var props = {}, all = props_().getProperties();
+  Object.keys(all).forEach(function (k) {
+    if (k === 'AUTH_SECRET' || k === 'LOCK' || k === 'UI_OVERRIDE' || k.indexOf('pw_') === 0 || k.indexOf('perm_') === 0) props[k] = all[k];
+  });
+  var log = [];
+  var lsh = ss_().getSheetByName(CFG.LOG_SHEET);
+  if (lsh) {
+    var lv = lsh.getDataRange().getValues();
+    for (var j = 1; j < lv.length; j++) {
+      var ts = lv[j][0];
+      log.push({ ts: (ts instanceof Date) ? Utilities.formatDate(ts, tz_(), 'yyyy-MM-dd HH:mm:ss') : String(ts), action: String(lv[j][1] || ''), month: String(lv[j][2] || ''),
+        iso: (lv[j][3] instanceof Date) ? iso_(lv[j][3]) : String(lv[j][3] || ''), shift: String(lv[j][4] || ''), name: String(lv[j][5] || ''), note: String(lv[j][6] || '') });
+    }
+  }
+  log_('匯出全部資料', '', '', '', actorOf_(payload), months.length + ' 個月份');
+  return { ok: true, data: { format: 'ucc-export-1', exportedAt: Utilities.formatDate(new Date(), tz_(), 'yyyy-MM-dd HH:mm:ss'), source: 'apps-script',
+    months: months, openDays: openDays, props: props, log: log } };
 }
 
 /* ============================ 第一次建置 ============================ */
