@@ -585,8 +585,12 @@ function applyUi(ui){
   S.ui = ui;
   var r = (S.boot && S.boot.rules) || {};
   try{ document.title = ((ui.orgShort ? ui.orgShort+' ' : '') + (ui.systemName||'排班系統')).trim(); }catch(e){}
-  var h1in = '<span class="donly">'+ui.titleDesktop+'</span><span class="mobonly">'+ui.titleMobile+'</span>';
-  $('h1').innerHTML = ui.orgUrl ? '<a href="'+ui.orgUrl+'" target="_blank" rel="noopener" title="前往公會網站">'+h1in+'</a>' : h1in;
+  // 頁首標題：組織名連到官網（新分頁）、系統名連回排班首頁（預設月份）
+  var sys = ui.systemName||'', td = ui.titleDesktop||'', si = sys ? td.indexOf(sys) : -1;
+  var orgPart = si>=0 ? td.slice(0,si) : td, sysPart = si>=0 ? td.slice(si) : '';
+  var orgHtml = (orgPart && ui.orgUrl) ? '<a href="'+ui.orgUrl+'" target="_blank" rel="noopener" title="前往公會網站">'+orgPart+'</a>' : orgPart;
+  var sysHtml = sysPart ? '<a href="#" class="home" title="回排班首頁">'+sysPart+'</a>' : '';
+  $('h1').innerHTML = '<span class="donly">'+orgHtml+sysHtml+'</span><span class="mobonly"><a href="#" class="home" title="回排班首頁">'+ui.titleMobile+'</a></span>';
   $('venueLine').textContent = ui.venueLine || '';
   $('loginScope').textContent = ui.loginScope || '';
   $('loginHelp').innerHTML =
@@ -1257,6 +1261,16 @@ function fillAdminSelects(){
 
 /* ===================== 啟動 ===================== */
 document.addEventListener('click', onSlot);
+/* 頁首系統名＝回首頁：回到預設月份、關掉編輯模式、捲到最上面 */
+$('h1').addEventListener('click', function(e){
+  var a = e.target.closest && e.target.closest('a.home'); if(!a) return;
+  e.preventDefault();
+  if(!S.token || !S.boot){ return; }
+  S.editOpen=false;
+  var m = S.boot.defaultMonth || (S.boot.months[0] ? S.boot.months[0].name : '');
+  if(m) loadMonth(m);
+  try{ window.scrollTo(0,0); }catch(err){}
+});
 $('mCancel').onclick=closeModal;
 $('mask').onclick=function(e){ if(e.target===$('mask')) closeModal(); };
 $('mOk').onclick=function(){
