@@ -20,6 +20,8 @@
 | `MAX_CONSECUTIVE_DAYS` | 最多連續幾天 | |
 | `LONG_HOLIDAY_MIN` | 連續幾個可排班日算長連假 | 觸發「前三個月排最多者優先」 |
 | `UI.orgShort`／`systemName` | 組織短名、系統名 | 瀏覽器標題、頁尾 |
+| `UI.orgUrl` | 頁首標題點下去連到哪裡 | 例：官網；留空＝不連結 |
+| `RETIRED_URL` | 系統搬家後填新網址 | 整站唯讀＋每頁提示新網址，只留資料備份匯出 |
 | `UI.titleDesktop`／`titleMobile` | 頁首標題 | 手機版字要少 |
 | `UI.venueLine` | 頁首第二行 | 醫院與班別時間 |
 | `UI.shifts` | 兩班的名稱與時段 | 數量固定兩班 |

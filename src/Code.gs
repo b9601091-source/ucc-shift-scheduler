@@ -203,6 +203,7 @@ function requireAdmin_(payload, perm) {
   var who = actorOf_(payload || {});
   if (!who) return { ok: false, needLogin: true, msg: '登入已過期，請重新登入' };
   if (!can_(who, perm)) return { ok: false, msg: '你沒有「' + permLabel_(perm) + '」的權限' };
+  var rb = retiredBlock_(); if (rb) return rb;   // 搬家後後臺一律唯讀（資料備份匯出走 requireSuper_，不受影響）
   return null;                      // null ＝ 通過
 }
 
@@ -295,7 +296,12 @@ function clearLock(payload) {
 }
 
 /** 寫入類動作的鎖定守門：鎖定期間只有管理者能改 */
+function retiredBlock_() {
+  if (!CFG.RETIRED_URL) return null;
+  return { ok: false, msg: '這個系統已搬到新網址，請改用：' + CFG.RETIRED_URL };
+}
 function lockBlocks_(actor) {
+  var rb = retiredBlock_(); if (rb) return rb;
   var st = lockState_();
   if (!st.locked || can_(actor, 'manage')) return null;
   return { ok: false, msg: st.label + ' 班表已由' + CFG.UI.contactShort + '鎖定，' + st.until + ' 起自動解除' };
@@ -659,6 +665,7 @@ function getBootstrap() {
     // 後臺「頁首頁尾文字」改過的值優先
     ui: effectiveUi_()
   };
+  out.ui.retiredUrl = CFG.RETIRED_URL || '';
   // 預設顯示「次月」：每月 5 號公布次月班表，打開網頁十之八九就是要看次月，少一次點選
   var t = todayIso_();
   var dRoc = parseInt(t.substring(0, 4), 10) - 1911;

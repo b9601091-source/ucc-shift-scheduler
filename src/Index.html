@@ -33,6 +33,8 @@
   .hdr{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap}
   .mosp{display:none}          /* 只有手機版需要這個空格 */
   .mobonly{display:none}       /* 手機版才顯示（短版標題） */
+  header h1 a{color:inherit;text-decoration:none}
+  header h1 a:hover{text-decoration:underline}
   .rlist{display:flex;flex-direction:column;gap:4px;font-size:13.5px}
   .rlist .rrow{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;background:#f5f7f9}
   .rlist .rrow .rseq{font-weight:700;width:1.4em;text-align:center}
@@ -583,7 +585,8 @@ function applyUi(ui){
   S.ui = ui;
   var r = (S.boot && S.boot.rules) || {};
   try{ document.title = ((ui.orgShort ? ui.orgShort+' ' : '') + (ui.systemName||'排班系統')).trim(); }catch(e){}
-  $('h1').innerHTML = '<span class="donly">'+ui.titleDesktop+'</span><span class="mobonly">'+ui.titleMobile+'</span>';
+  var h1in = '<span class="donly">'+ui.titleDesktop+'</span><span class="mobonly">'+ui.titleMobile+'</span>';
+  $('h1').innerHTML = ui.orgUrl ? '<a href="'+ui.orgUrl+'" target="_blank" rel="noopener" title="前往公會網站">'+h1in+'</a>' : h1in;
   $('venueLine').textContent = ui.venueLine || '';
   $('loginScope').textContent = ui.loginScope || '';
   $('loginHelp').innerHTML =
@@ -595,6 +598,7 @@ function applyUi(ui){
   $('ftSys').textContent = ui.systemName || '排班系統';
   $('ftConf').textContent = ui.confidentialNote || '';
   $('ftContact').textContent = ui.contactLine || '';
+  if(ui.retiredUrl){ S.retired = true; var rb = $('demoBar'); rb.innerHTML = '🚚 <b>系統已搬家</b>：新版排班系統在 <a href="'+ui.retiredUrl+'" target="_top"><b>'+ui.retiredUrl+'</b></a>，請改用新網址並更新書籤；這裡只能查看，不能再填寫。'; rb.style.display=''; }
   $('ftCredit').innerHTML = ui.creditHtml ? (ui.contactLine ? '<br>' : '') + ui.creditHtml : '';
 }
 
@@ -1007,7 +1011,7 @@ function onSlot(e){
   var b=e.target.closest('.slot');
   if(!b||b.disabled) return;
   if(S.viewOnly){
-    toast(S.readOnly ? '此帳號不參與排班，不能填寫或修改'
+    toast(S.retired ? '系統已搬家，請改用新網址' : S.readOnly ? '此帳號不參與排班，不能填寫或修改'
                      : (S.lock.label+' 班表已鎖定，'+S.lock.until+' 起自動解除')); return; }
   if(!S.me){ toast('請先在上方「我是」選擇你的姓名'); $('selName').focus(); return; }
   var iso=b.dataset.iso, shift=b.dataset.shift;
@@ -1088,7 +1092,7 @@ function applyMonth(d, m){
     $('pwTip').style.display = S.isDefaultPw ? '' : 'none';
   }
   S.lock = d.lock || null;
-  S.viewOnly = S.readOnly || !!(S.lock && S.lock.locked && !S.perms.manage);
+  S.viewOnly = S.readOnly || !!S.retired || !!(S.lock && S.lock.locked && !S.perms.manage);
   S.month = (d.forcedMonth && d.name) ? d.name : m;
   setData(d);
 }
