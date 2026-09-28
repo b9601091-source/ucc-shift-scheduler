@@ -588,7 +588,9 @@ function applyUi(ui){
   // 頁首標題：組織名連到官網（新分頁）、系統名連回排班首頁（預設月份）
   var sys = ui.systemName||'', td = ui.titleDesktop||'', si = sys ? td.indexOf(sys) : -1;
   var orgPart = si>=0 ? td.slice(0,si) : td, sysPart = si>=0 ? td.slice(si) : '';
-  var orgHtml = (orgPart && ui.orgUrl) ? '<a href="'+ui.orgUrl+'" target="_blank" rel="noopener" title="前往公會網站">'+orgPart+'</a>' : orgPart;
+  // 組織名後面的空格不算在連結裡（不然底線會拖到系統名前面）
+  var om = orgPart.match(/^([\s\S]*?)([\s　]*)$/), orgTxt = om ? om[1] : orgPart, orgGap = om ? om[2] : '';
+  var orgHtml = ((orgTxt && ui.orgUrl) ? '<a href="'+ui.orgUrl+'" target="_blank" rel="noopener" title="前往公會網站">'+orgTxt+'</a>' : orgTxt) + orgGap;
   var sysHtml = sysPart ? '<a href="#" class="home" title="回排班首頁">'+sysPart+'</a>' : '';
   $('h1').innerHTML = '<span class="donly">'+orgHtml+sysHtml+'</span><span class="mobonly"><a href="#" class="home" title="回排班首頁">'+ui.titleMobile+'</a></span>';
   $('venueLine').textContent = ui.venueLine || '';
