@@ -6,3 +6,8 @@
 node_modules/
 .DS_Store
 Thumbs.db
+# PHP 版：各組織自己的設定與線上資料不進版本庫
+php/ucc/lib/config.php
+php/ucc/data/*
+!php/ucc/data/.htaccess
+!php/ucc/data/.gitignore

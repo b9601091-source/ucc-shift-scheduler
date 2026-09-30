@@ -1,0 +1,38 @@
+# UCC 排班系統需要 PHP 8.0 以上。主機預設版本太舊時，依主機商說明切換（cPanel 的 MultiPHP／PHP Selector，
+# 或像下面這樣在本資料夾指定 handler；名稱各家不同，填錯可能讓 .php 原始碼被當純文字送出，務必上線後檢查）。
+# <IfModule mime_module>
+#   AddHandler application/x-httpd-alt-php82___lsphp .php
+# </IfModule>
+<IfModule LiteSpeed>
+  php_value post_max_size 20M
+  php_value upload_max_filesize 20M
+  php_value memory_limit 256M
+</IfModule>
+<IfModule mod_lsapi.c>
+  php_value post_max_size 20M
+  php_value upload_max_filesize 20M
+  php_value memory_limit 256M
+</IfModule>
+DirectoryIndex index.html
+Options -Indexes
+
+# 只允許 api.php 執行，其它 PHP 一律拒絕
+<FilesMatch "^(?!api\.php$).*\.(php[0-9]?|phtml|phar|inc)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>
+# 資料庫、紀錄、設定、說明檔不對外
+<FilesMatch "\.(sqlite|sqlite3|db|db-wal|db-shm|sqlite-wal|sqlite-shm|log|ini|md|ps1|sh|bak|txt)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+</FilesMatch>

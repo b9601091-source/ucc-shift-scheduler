@@ -4,8 +4,11 @@
 
 ## 這是什麼
 
-Google Apps Script 網頁應用程式：讓一群人依順位輪流填班，資料直接讀寫使用者現有的 Google 試算表。
-沒有資料庫、沒有建置步驟、沒有框架。前端是一個 HTML 檔，後端是兩個 .gs 檔。
+讓一群人依順位輪流填班的網頁，有兩個後端、共用一份前端：
+- **Apps Script 版**（`src/`）：資料直接讀寫使用者現有的 Google 試算表。沒有資料庫、沒有建置步驟、沒有框架。
+- **PHP 自架版**（`php/`）：PHP 8＋SQLite，放組織自己的網站主機。API 名稱、參數、回傳格式與 Apps Script 版相同；說明在 `docs/php.md`。
+
+前端只有 `src/Index.html` 一份；PHP 版的 `php/ucc/index.html` 由 `php/tools/build_index.py` 產生（把 `google.script.run` 換成 `fetch('api.php')`，並加上 PHP 版專屬的後臺功能）。
 
 ## 檔案地圖
 
@@ -17,7 +20,11 @@ Google Apps Script 網頁應用程式：讓一群人依順位輪流填班，資�
 | `src/appsscript.json` | 部署設定（V8、Asia/Taipei、網頁應用程式存取權） | 時區可改 |
 | `demo/index.html` | 離線示範版：內建假後端，開檔即可玩 | 由正式版產生，不要手改 |
 | `tests/` | Node 測試：`gas_mock.js` 模擬 Apps Script 服務；`backend.test.js`、`frontend.test.js`（jsdom） | 加功能請加測試 |
-| `docs/` | 部署、架構、客製化說明 | — |
+| `docs/` | 部署、架構、客製化說明；PHP 版在 `docs/php.md` | — |
+| `php/ucc/lib/config.php`（由 `config.example.php` 複製） | PHP 版的組織專屬設定，內容對應 `Config.gs` | **PHP 版的主要修改點** |
+| `php/ucc/lib/*.php`、`php/ucc/api.php` | PHP 版後端；`api.php` 的 `API_MAP` 是前端可呼叫的函式白名單 | 加 API 要同時改 `API_MAP` 與 Apps Script 版同名函式 |
+| `php/ucc/index.html` | PHP 版前端 | 由 `build_index.py` 產生，不要手改 |
+| `php/tests/run.php` | PHP 版後端測試（`php php/tests/run.php`） | 加功能請加測試 |
 
 ## 不變式（改任何東西前先讀）
 
@@ -69,6 +76,16 @@ npm test           # backend.test.js（Apps Script 服務模擬）＋ frontend.t
 後端測試用 `tests/gas_mock.js` 模擬 SpreadsheetApp／PropertiesService／Utilities 等，
 直接載入 `src/Config.example.gs` 與 `src/Code.gs` 執行。加後端功能請在 `backend.test.js` 加案例；
 前端改動請在 `frontend.test.js` 用假的 `google.script.run` 驗證畫面。
+
+PHP 版：`php php/tests/run.php`（最後一行「通過 N／失敗 0」，有失敗時結束碼 1）。
+改 `src/Index.html` 後要跑 `python php/tools/build_index.py`，它會 assert 每個替換錨點都還在；錨點不見了代表前端改到橋接區塊，要一起改產生腳本。
+
+## 兩版同步的規則
+
+- 前端只改 `src/Index.html`，再重產 PHP 版前端。
+- 後端功能兩版都要做，函式名稱、參數、回傳形狀保持一致（前端不分版本）。
+- 組織專屬內容：Apps Script 版只放 `Config.gs`，PHP 版只放 `config.php`；兩個範本檔要一起更新。
+- 密碼雜湊公式 `sha256(secret|姓名|密碼)` 兩版必須相同，否則搬移後舊密碼不能用。
 
 ## 部署
 
