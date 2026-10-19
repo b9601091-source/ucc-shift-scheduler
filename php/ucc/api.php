@@ -1,7 +1,7 @@
 <?php
 /* UCC 排班系統（PHP 版）— 唯一對外 PHP 入口
  *   POST api.php  body={"fn":"getMonth","arg":{…}}  → 直接回該函式的結果（形狀與 Apps Script 版 google.script.run 相同）
- *   GET  api.php?diag=1 診斷；?smoke=1 煙霧測試 */
+ *   GET  api.php?diag=1 診斷（要管理金鑰：標頭 X-Diag-Key 或 &k=）；?smoke=1 煙霧測試 */
 define('UCC', 1);
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
@@ -49,7 +49,7 @@ const API_MAP = [
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 try {
   if ($method === 'GET') {
-    if (isset($_GET['diag'])) { ensureSetup_(); text_(diagText_()); }
+    if (isset($_GET['diag'])) { ensureSetup_(); if (!diagKeyOk_()) text_('診斷頁需要管理金鑰', 403); text_(diagText_()); }
     if (isset($_GET['smoke'])) { ensureSetup_(); text_(smokeText_()); }
     header('Location: ./', true, 302);
     exit;

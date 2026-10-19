@@ -232,6 +232,18 @@ ok($mF['days'] === $mE['days'] && $mF['order'] === $mE['order'] && $mF['notes'] 
 /* ================= 12. 診斷 ================= */
 $E->use_();
 ok(strpos(diagText_(), 'APP_VERSION = ' . APP_VERSION) === 0 && strpos(smokeText_(), 'SMOKE OK') === 0, 'diag／smoke');
+// 診斷頁管理金鑰：沒帶、帶錯都拒絕；有金鑰檔時帶對才通過
+unset($_SERVER['HTTP_X_DIAG_KEY']); $_GET = [];
+ok(diagKeyOk_() === false, 'diag 無金鑰拒絕');
+$_GET = ['k' => 'wrong-key'];
+ok(diagKeyOk_() === false, 'diag 金鑰錯誤拒絕');
+$_GET = [];
+$keyTxt = dirname(__DIR__) . DIRECTORY_SEPARATOR . 'diag_key.txt';
+if (is_file($keyTxt) && is_file(dirname(__DIR__) . '/ucc/lib/diag_key.php')) {
+  $_SERVER['HTTP_X_DIAG_KEY'] = trim(file_get_contents($keyTxt));
+  ok(diagKeyOk_() === true, 'diag 帶標頭金鑰通過');
+  unset($_SERVER['HTTP_X_DIAG_KEY']);
+}
 
 foreach (Env::$all as $e) { foreach (glob($e->dir . '/*') as $f) @unlink($f); @rmdir($e->dir); }
 echo "通過 {$PASS}／失敗 {$FAILS}\n";

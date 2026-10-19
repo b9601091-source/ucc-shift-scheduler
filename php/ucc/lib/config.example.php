@@ -4,7 +4,7 @@
  * 換組織只改這個檔；lib/ 其他檔案與 index.html 不含任何組織字串。 */
 if (!defined('UCC')) { http_response_code(404); exit; }
 
-const APP_VERSION = '1.0.1';
+const APP_VERSION = '1.0.2';
 const SCHEMA_VERSION = 1;
 
 /** 頁尾「更新紀錄」：每則＝粗體標題＋一句話；同日彙整一則，新的在上 */

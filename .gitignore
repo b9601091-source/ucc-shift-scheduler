@@ -11,3 +11,7 @@ php/ucc/lib/config.php
 php/ucc/data/*
 !php/ucc/data/.htaccess
 !php/ucc/data/.gitignore
+
+# 診斷頁管理金鑰（勿進版本庫）
+php/ucc/lib/diag_key.php
+php/diag_key.txt

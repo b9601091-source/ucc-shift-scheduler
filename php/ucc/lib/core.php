@@ -206,6 +206,16 @@ function ensureSetup_() {
 }
 
 /* ================= 診斷 ================= */
+/** 診斷頁管理金鑰：lib/diag_key.php 回傳金鑰的 SHA-256（不進版本庫），請求以標頭 X-Diag-Key 或 &k= 帶金鑰。
+ *  產生方式：隨機產生一組金鑰自己保存，把它的 SHA-256（64 位十六進位）寫成 <?php return '…'; 放在 lib/diag_key.php。
+ *  沒有這個檔＝診斷頁一律拒絕。 */
+function diagKeyOk_() {
+  $f = __DIR__ . '/diag_key.php';
+  if (!is_file($f)) return false;
+  $want = (string)(include $f);
+  $k = (string)($_SERVER['HTTP_X_DIAG_KEY'] ?? ($_GET['k'] ?? ''));
+  return strlen($want) === 64 && $k !== '' && hash_equals($want, hash('sha256', $k));
+}
 function diagText_() {
   $o = ['APP_VERSION = ' . APP_VERSION, 'schema_version = ' . (prop_('SCHEMA_VERSION') ?? '?'), 'php = ' . PHP_VERSION, 'sqlite = ' . SQLite3::version()['versionString'],
     'time = ' . nowStr_(), 'months = ' . implode('、', listMonths_())];
