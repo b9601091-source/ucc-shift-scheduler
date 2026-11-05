@@ -8,7 +8,8 @@ function apiGetBootstrap($p = []) {
     'today' => todayIso_(),
     'rules' => ['maxShifts' => CFG()['MAX_SHIFTS_PER_MONTH'], 'maxConsecutive' => CFG()['MAX_CONSECUTIVE_DAYS'], 'deadlineDay' => CFG()['DEADLINE_DAY'],
       'openDay' => CFG()['OPEN_DAY'], 'maxFail' => CFG()['LOGIN_MAX_FAIL'], 'lockMin' => CFG()['LOGIN_LOCK_MIN']],
-    'ui' => effectiveUi_() + ['pilotNote' => CFG()['PILOT_NOTE'], 'appVersion' => APP_VERSION, 'changelog' => CHANGELOG()]];
+    'ui' => effectiveUi_() + ['pilotNote' => CFG()['PILOT_NOTE'], 'appVersion' => APP_VERSION, 'changelog' => CHANGELOG()],
+    'sso' => ssoEnabled_()];
   // 預設顯示「次月」
   $t = todayIso_(); $dRoc = (int)substr($t, 0, 4) - 1911; $dMon = (int)substr($t, 5, 2) + 1;
   if ($dMon > 12) { $dMon = 1; $dRoc++; }

@@ -6,7 +6,7 @@ error_reporting(E_ALL);
 ini_set('display_errors', '1');
 $LIB = dirname(__DIR__) . '/ucc/lib';
 require $LIB . '/' . (is_file($LIB . '/config.php') ? 'config' : 'config.example') . '.php';
-foreach (['core', 'auth', 'sched', 'admin'] as $f) require $LIB . '/' . $f . '.php';
+foreach (['core', 'auth', 'sched', 'admin', 'sso'] as $f) require $LIB . '/' . $f . '.php';
 date_default_timezone_set(CFG()['TZ']);
 set_error_handler(function ($no, $str, $file, $line) {
   if (!(error_reporting() & $no)) return false;
@@ -244,6 +244,123 @@ if (is_file($keyTxt) && is_file(dirname(__DIR__) . '/ucc/lib/diag_key.php')) {
   ok(diagKeyOk_() === true, 'diag 帶標頭金鑰通過');
   unset($_SERVER['HTTP_X_DIAG_KEY']);
 }
+
+
+/* ================= 13. 快速登入（LINE／Google，假的提供者） ================= */
+echo "=== 快速登入\n";
+$G = env('2026-11-05');
+$G->apiImportAll(['token' => $G->apiLogin(['seq' => 'Z', 'pw' => '0000'])['token'], 'data' => gasExport($NAMES, ['115/11'], [], ['AUTH_SECRET' => 'ssosecret'])]);
+$G->use_();
+unset($GLOBALS['UCC_SSO_KEYS']);
+$_SERVER['HTTPS'] = 'on'; $_SERVER['HTTP_HOST'] = 'www.example.org'; $_SERVER['SCRIPT_NAME'] = '/web/ucc/sso.php';
+ok($G->apiGetBootstrap([])['sso'] === [], '沒金鑰 → bootstrap 不開放任何快速登入');
+ok(strpos($G->ssoHandleStart_('line', ''), 'sso=error&m=off') !== false, '沒開通時 start 回錯誤');
+$GLOBALS['UCC_SSO_KEYS'] = ['line_channel_id' => '1234567890', 'line_channel_secret' => 'secretLINE', 'google_client_id' => 'abc.apps.googleusercontent.com'];
+// 重置 ssoKeys_ 的 static 快取：另開一個環境即可（static 在函式內，整個程序共用）→ 改用反射不可行，這裡直接重新 include 不可能；所以測試一開始就設定 keys 再第一次呼叫
+$H = env('2026-11-05');
+$tZ = $H->apiLogin(['seq' => 'Z', 'pw' => '0000'])['token'];
+$H->apiImportAll(['token' => $tZ, 'data' => gasExport($NAMES, ['115/11'], [], ['AUTH_SECRET' => 'ssosecret'])]);
+$H->use_();
+$tZ = $H->apiLogin(['seq' => 'Z', 'pw' => '0000'])['token'];
+$tA = $H->apiLogin(['seq' => 'A', 'pw' => '0000'])['token'];
+ok($H->apiGetBootstrap([])['sso'] === ['line', 'google'], 'bootstrap 列出 line、google');
+$u = $H->ssoHandleStart_('line', '');
+ok(strpos($u, 'https://access.line.me/oauth2/v2.1/authorize?') === 0 && strpos($u, 'client_id=1234567890') !== false && strpos($u, rawurlencode('https://www.example.org/web/ucc/sso.php')) !== false, 'LINE 授權網址（回呼＝sso.php 不帶參數）', $u);
+parse_str(parse_url($u, PHP_URL_QUERY), $q1);
+$st1 = $q1['state'];
+ok(preg_match('/^[0-9a-f]{32}$/', $st1) === 1 && jdec_(prop_('sso_' . $st1))['mode'] === 'login', 'state 已存、模式 login');
+// 假的 LINE：token 端點回 id_token，verify 端點回 sub
+$calls = [];
+$GLOBALS['UCC_SSO_HTTP'] = function ($url, $post) use (&$calls) {
+  $calls[] = [$url, $post];
+  if (strpos($url, '/oauth2/v2.1/token') !== false) return [$post['code'] === 'GOODCODE' ? 200 : 400, jenc_(['id_token' => 'IDT', 'access_token' => 'AT'])];
+  if (strpos($url, '/oauth2/v2.1/verify') !== false) return [200, jenc_(['sub' => 'Uline001', 'name' => '小明的LINE', 'nonce' => $post['nonce']])];
+  if (strpos($url, 'tokeninfo') !== false) {
+    $m = []; parse_str(parse_url($url, PHP_URL_QUERY), $m);
+    $fake = jdec_(base64_decode($m['id_token']));   // 測試用：id_token 直接是 base64 的 JSON
+    return [empty($fake) ? 400 : 200, jenc_($fake)];
+  }
+  return [404, ''];
+};
+// 未綁定就用 LINE 登入 → unbound
+$r = $H->ssoHandleCallback_(['code' => 'GOODCODE', 'state' => $st1]);
+ok(strpos($r, 'sso=unbound&p=line') !== false, '未綁定 → 回 unbound', $r);
+ok(prop_('sso_' . $st1) === null, 'state 用過即刪');
+ok(strpos($H->ssoHandleCallback_(['code' => 'GOODCODE', 'state' => $st1]), 'm=expired') !== false, '重放同一個 state → expired');
+// 綁定：先登入拿票
+$t = $H->apiSsoBindTicket(['token' => $tA, 'provider' => 'line']);
+ok($t['ok'] && strpos($t['url'], 'sso.php?go=') === 0, 'A 拿到綁定票', $t);
+$bad = $H->apiSsoBindTicket(['token' => $tZ, 'provider' => 'line']);
+ok(!$bad['ok'] && strpos($bad['msg'], '超級管理者') !== false, '超管不能綁定');
+$go = substr($t['url'], strlen('sso.php?go='));
+$u2 = $H->ssoHandleStart_('', $go);
+ok(strpos($u2, 'access.line.me') === 0 || strpos($u2, 'https://access.line.me') === 0, '票換成授權網址', $u2);
+ok(strpos($H->ssoHandleStart_('', $go), 'm=expired') !== false, '票只能用一次');
+parse_str(parse_url($u2, PHP_URL_QUERY), $q2);
+$r = $H->ssoHandleCallback_(['code' => 'BADCODE', 'state' => $q2['state']]);
+ok(strpos($r, 'm=verify') !== false, '換取失敗 → verify 錯誤', $r);
+$u2 = $H->ssoHandleStart_('', substr($H->apiSsoBindTicket(['token' => $tA, 'provider' => 'line'])['url'], 11));
+parse_str(parse_url($u2, PHP_URL_QUERY), $q2);
+$r = $H->ssoHandleCallback_(['code' => 'GOODCODE', 'state' => $q2['state']]);
+ok(strpos($r, 'sso=bound&p=line') !== false, 'A 綁定 LINE 成功', $r);
+$lst = $H->apiSsoList(['token' => $tA]);
+ok($lst['ok'] && $lst['allowed'] && count($lst['bound']) === 1 && $lst['bound'][0]['provider'] === 'line' && $lst['bound'][0]['label'] === '小明的LINE', '列出 A 的綁定', $lst);
+// 用 LINE 登入 → 拿到 token
+$u3 = $H->ssoHandleStart_('line', ''); parse_str(parse_url($u3, PHP_URL_QUERY), $q3);
+$r = $H->ssoHandleCallback_(['code' => 'GOODCODE', 'state' => $q3['state']]);
+ok(preg_match('#/web/ucc/\#sso_tok=([^&]+)&p=line$#', $r, $mm) === 1, 'LINE 登入 → 導回首頁帶 #sso_tok', $r);
+$tok = rawurldecode($mm[1]);
+$H->use_();
+ok(tokenName_($tok) === '王小明', 'token 是王小明的');
+$parts = explode('|', $tok);
+ok(((float)$parts[1] - nowMs_()) <= 7 * 86400000 + 1000 && ((float)$parts[1] - nowMs_()) > 6 * 86400000, '快速登入 token 7 天（比密碼登入短）');
+ok($H->apiGetMonth(['token' => $tok, 'month' => '115/11'])['viewer']['name'] === '王小明', '用這個 token 可讀月份');
+// 同一個 LINE 不能再綁給 B
+$tB = $H->apiLogin(['seq' => 'B', 'pw' => '0000'])['token'];
+$u4 = $H->ssoHandleStart_('', substr($H->apiSsoBindTicket(['token' => $tB, 'provider' => 'line'])['url'], 11)); parse_str(parse_url($u4, PHP_URL_QUERY), $q4);
+$r = $H->ssoHandleCallback_(['code' => 'GOODCODE', 'state' => $q4['state']]);
+ok(strpos($r, 'm=taken') !== false, '同一個 LINE 已屬於 A → B 綁不了', $r);
+// 取消
+$u5 = $H->ssoHandleStart_('line', ''); parse_str(parse_url($u5, PHP_URL_QUERY), $q5);
+ok(strpos($H->ssoHandleCallback_(['error' => 'access_denied', 'state' => $q5['state']]), 'sso=cancel') !== false, '使用者取消 → cancel');
+// Google：id_token 驗 aud／nonce／exp
+$u6 = $H->ssoHandleStart_('', substr($H->apiSsoBindTicket(['token' => $tA, 'provider' => 'google'])['url'], 11)); parse_str(parse_url($u6, PHP_URL_QUERY), $q6);
+ok(strpos($u6, 'https://accounts.google.com/o/oauth2/v2/auth?') === 0 && strpos($u6, 'response_mode=form_post') !== false && strpos($u6, 'response_type=id_token') !== false, 'Google 授權網址（OIDC 隱含流程、form_post）');
+$mk = function ($over) use (&$q6) { return base64_encode(jenc_($over + ['sub' => 'G777', 'aud' => 'abc.apps.googleusercontent.com', 'nonce' => $q6['nonce'], 'exp' => (int)(nowMs_() / 1000) + 300, 'email' => 'a@example.org', 'name' => '王小明G'])); };
+$r = $H->ssoHandleCallback_(['id_token' => $mk(['aud' => 'other']), 'state' => $q6['state']]);
+ok(strpos($r, 'm=verify') !== false, 'aud 不符 → 擋', $r);
+$u6 = $H->ssoHandleStart_('', substr($H->apiSsoBindTicket(['token' => $tA, 'provider' => 'google'])['url'], 11)); parse_str(parse_url($u6, PHP_URL_QUERY), $q6);
+$r = $H->ssoHandleCallback_(['id_token' => $mk(['nonce' => 'wrong']), 'state' => $q6['state']]);
+ok(strpos($r, 'm=verify') !== false, 'nonce 不符 → 擋');
+$u6 = $H->ssoHandleStart_('', substr($H->apiSsoBindTicket(['token' => $tA, 'provider' => 'google'])['url'], 11)); parse_str(parse_url($u6, PHP_URL_QUERY), $q6);
+$r = $H->ssoHandleCallback_(['id_token' => $mk([]), 'state' => $q6['state']]);
+ok(strpos($r, 'sso=bound&p=google') !== false, 'A 綁定 Google 成功', $r);
+ok(count($H->apiSsoList(['token' => $tA])['bound']) === 2, 'A 兩種都綁了');
+$st = $H->apiAdminPwStatus(['token' => $tZ]);
+$rowA = null; foreach ($st['rows'] as $x) if ($x['name'] === '王小明') $rowA = $x;
+ok($rowA && $rowA['sso'] === ['google', 'line'], '密碼狀態列出 A 的綁定', $rowA);
+// 備份含綁定、匯入還原
+$ex = $H->apiExportAll(['token' => $tZ]);
+ok(count($ex['data']['sso']) === 2, '備份含 2 筆綁定');
+// 解除
+ok($H->apiSsoUnbind(['token' => $tA, 'provider' => 'google'])['ok'] && count($H->apiSsoList(['token' => $tA])['bound']) === 1, 'A 自己解除 Google');
+ok($H->apiAdminSsoUnbind(['token' => $tZ, 'name' => '王小明'])['ok'] && count($H->apiSsoList(['token' => $tA])['bound']) === 0, '超管解除 A 全部綁定');
+ok(!$H->apiAdminSsoUnbind(['token' => $tA, 'name' => '陳小美'])['ok'], 'A 沒有 resetpw 權限不能替人解除');
+// 解除後用 LINE 登入 → unbound
+$u7 = $H->ssoHandleStart_('line', ''); parse_str(parse_url($u7, PHP_URL_QUERY), $q7);
+ok(strpos($H->ssoHandleCallback_(['code' => 'GOODCODE', 'state' => $q7['state']]), 'sso=unbound') !== false, '解除後 LINE 登入 → unbound');
+// 匯入備份還原綁定
+$I = env('2026-11-05');
+$tZi = $I->apiLogin(['seq' => 'Z', 'pw' => '0000'])['token'];
+$I->apiImportAll(['token' => $tZi, 'data' => $ex['data']]);
+$I->use_();
+ok(count(qa_('SELECT * FROM sso')) === 2, '匯入後綁定還原');
+// 移除人員 → 綁定一起刪
+$tZi = $I->apiLogin(['seq' => 'Z', 'pw' => '0000'])['token'];
+$I->apiRosterRemove(['token' => $tZi, 'name' => '王小明']);
+$I->use_();
+ok(count(qa_('SELECT * FROM sso WHERE name = ?', ['王小明'])) === 0, '移除人員連綁定一起刪');
+unset($GLOBALS['UCC_SSO_HTTP'], $GLOBALS['UCC_SSO_KEYS']);
 
 foreach (Env::$all as $e) { foreach (glob($e->dir . '/*') as $f) @unlink($f); @rmdir($e->dir); }
 echo "通過 {$PASS}／失敗 {$FAILS}\n";

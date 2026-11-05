@@ -8,7 +8,7 @@ ini_set('display_errors', '0');
 ini_set('log_errors', '1');
 // 設定檔：有 lib/config.php 就用它，沒有就用 lib/config.example.php（clone 下來可直接試用）
 require __DIR__ . '/lib/' . (is_file(__DIR__ . '/lib/config.php') ? 'config' : 'config.example') . '.php';
-foreach (['core', 'auth', 'sched', 'admin'] as $f) require __DIR__ . '/lib/' . $f . '.php';
+foreach (['core', 'auth', 'sched', 'admin', 'sso'] as $f) require __DIR__ . '/lib/' . $f . '.php';
 date_default_timezone_set(CFG()['TZ']);
 ini_set('error_log', dataDir_() . '/php-error.log');
 
@@ -44,6 +44,7 @@ const API_MAP = [
   'adminResetPw' => 'apiAdminResetPw', 'adminPwStatus' => 'apiAdminPwStatus', 'adminUsers' => 'apiAdminUsers', 'setPerms' => 'apiSetPerms',
   'rosterAdd' => 'apiRosterAdd', 'rosterRemove' => 'apiRosterRemove', 'getUiSettings' => 'apiGetUiSettings', 'saveUiSettings' => 'apiSaveUiSettings',
   'exportAll' => 'apiExportAll', 'importAll' => 'apiImportAll', 'exportXlsx' => 'apiExportXlsx',
+  'ssoList' => 'apiSsoList', 'ssoBindTicket' => 'apiSsoBindTicket', 'ssoUnbind' => 'apiSsoUnbind', 'adminSsoUnbind' => 'apiAdminSsoUnbind',
 ];
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';

@@ -15,3 +15,6 @@ php/ucc/data/*
 # 診斷頁管理金鑰（勿進版本庫）
 php/ucc/lib/diag_key.php
 php/diag_key.txt
+
+# 快速登入金鑰（set_sso_keys.ps1 產生）
+php/ucc/lib/sso_keys.php

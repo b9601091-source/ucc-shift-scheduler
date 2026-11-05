@@ -16,8 +16,8 @@
 DirectoryIndex index.html
 Options -Indexes
 
-# 只允許 api.php 執行，其它 PHP 一律拒絕
-<FilesMatch "^(?!api\.php$).*\.(php[0-9]?|phtml|phar|inc)$">
+# 只允許 api.php 與 sso.php（快速登入回呼）執行，其它 PHP 一律拒絕
+<FilesMatch "^(?!(api|sso)\.php$).*\.(php[0-9]?|phtml|phar|inc)$">
   <IfModule mod_authz_core.c>
     Require all denied
   </IfModule>

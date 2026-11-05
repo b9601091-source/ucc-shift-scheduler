@@ -48,6 +48,7 @@ function apiRosterRemove($p = []) {
       $done[] = $mn;
     }
     x_('DELETE FROM users WHERE name = ?', [$name]);
+    x_('DELETE FROM sso WHERE name = ?', [$name]);
     clearFail_($name);
     log_('移除人員', implode('、', $done), '', '', $name, '（操作者 ' . actorOf_($p) . '）');
     return ['ok' => true, 'msg' => '已將 ' . $name . ' 移出順位：' . (implode('、', $done) ?: '（沒有月份需要改）') . '。歷史月份的紀錄不受影響'];
@@ -75,6 +76,7 @@ function exportAll_() {
   }
   return ['format' => 'ucc-export-1', 'exportedAt' => nowStr_(), 'source' => 'php ' . APP_VERSION,
     'months' => $months, 'openDays' => qa_('SELECT iso, open, note FROM open_days ORDER BY iso'), 'props' => (object)$props,
+    'sso' => qa_('SELECT provider, sub, name, label, bound FROM sso ORDER BY name, provider'),
     'log' => qa_('SELECT ts, action, month, iso, shift, name, note FROM log ORDER BY id')];
 }
 function apiExportAll($p = []) {
@@ -86,7 +88,7 @@ function apiExportAll($p = []) {
 function importAll_($j, $replace) {
   if (!is_array($j) || empty($j['months']) || !is_array($j['months'])) throw new Exception('匯入資料格式不對：沒有 months');
   if (listMonths_() && !$replace) throw new Exception('資料庫已有月份資料；要整個覆蓋請勾「取代現有資料」');
-  foreach (['slots', 'roster', 'notes', 'months', 'users', 'open_days'] as $t) x_("DELETE FROM $t");
+  foreach (['slots', 'roster', 'notes', 'months', 'users', 'open_days', 'sso'] as $t) x_("DELETE FROM $t");
   foreach (['LOCK', 'UI_OVERRIDE', 'AUTH_SECRET'] as $k) delProp_($k);
   x_("DELETE FROM _props WHERE k LIKE 'fail_%'");
   $n = ['months' => 0, 'slots' => 0, 'roster' => 0, 'users' => 0, 'openDays' => 0, 'log' => 0];
@@ -134,6 +136,10 @@ function importAll_($j, $replace) {
     if (strpos($k, 'perm_') === 0) $users[substr($k, 5)]['perms'] = (string)$v;
   }
   foreach ($users as $nm => $f) { setUser_($nm, $f + ['pw_hash' => '', 'perms' => '']); $n['users']++; }
+  foreach ((array)($j['sso'] ?? []) as $b) {
+    if (!is_array($b) || str_($b['provider'] ?? '') === '' || str_($b['sub'] ?? '') === '' || str_($b['name'] ?? '') === '') continue;
+    x_('INSERT OR REPLACE INTO sso (provider, sub, name, label, bound) VALUES (?,?,?,?,?)', [str_($b['provider']), str_($b['sub']), str_($b['name']), str_($b['label'] ?? ''), str_($b['bound'] ?? '')]);
+  }
   foreach ((array)($j['log'] ?? []) as $l) {
     if (!is_array($l)) continue;
     x_('INSERT INTO log (ts, action, month, iso, shift, name, note) VALUES (?,?,?,?,?,?,?)', [str_($l['ts'] ?? ($l['時間'] ?? '')), str_($l['action'] ?? ''), str_($l['month'] ?? ''), str_($l['iso'] ?? ''), str_($l['shift'] ?? ''), str_($l['name'] ?? ''), str_($l['note'] ?? '')]);

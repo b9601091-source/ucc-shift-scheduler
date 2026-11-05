@@ -28,6 +28,14 @@ function db_() {
   $want = dataDir_() . '/' . CFG()['DB_FILE'];
   if ($db && $path === $want) return $db;
   if (!is_dir(dataDir_())) @mkdir(dataDir_(), 0755, true);
+  if (!is_file($want)) {
+    // 20261030 公會主機資安事件：資料庫改用隨機檔名（lib/db_name.php）。第一次連線把舊檔名搬過去；搬不動就沿用舊檔，不開新的空資料庫
+    $old = dataDir_() . '/' . CFG()['DB_FILE_LEGACY'];
+    if ($old !== $want && is_file($old)) {
+      if (@rename($old, $want)) { foreach (['-wal', '-shm'] as $x) if (is_file($old . $x)) @rename($old . $x, $want . $x); }
+      elseif (is_file($old)) $want = $old;
+    }
+  }
   $db = new SQLite3($want);
   $db->enableExceptions(true);
   $db->busyTimeout(15000);
@@ -46,6 +54,7 @@ function ensureSchema_() {
   $db->exec('CREATE TABLE IF NOT EXISTS open_days (iso TEXT PRIMARY KEY, open INTEGER DEFAULT 0, note TEXT DEFAULT \'\')');
   $db->exec('CREATE TABLE IF NOT EXISTS users (name TEXT PRIMARY KEY, pw_hash TEXT DEFAULT \'\', perms TEXT DEFAULT \'\', updated TEXT)');
   $db->exec('CREATE TABLE IF NOT EXISTS log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, action TEXT, month TEXT, iso TEXT, shift TEXT, name TEXT, note TEXT)');
+  $db->exec('CREATE TABLE IF NOT EXISTS sso (provider TEXT, sub TEXT, name TEXT, label TEXT DEFAULT \'\', bound TEXT, PRIMARY KEY (provider, sub))');   // LINE／Google 綁定
   if (prop_('SCHEMA_VERSION') === null) setProp_('SCHEMA_VERSION', (string)SCHEMA_VERSION);
 }
 function q1_($sql, $params = []) { $st = db_()->prepare($sql); foreach ($params as $i => $v) $st->bindValue($i + 1, $v); return $st->execute()->fetchArray(SQLITE3_ASSOC) ?: null; }
@@ -219,7 +228,8 @@ function diagKeyOk_() {
 function diagText_() {
   $o = ['APP_VERSION = ' . APP_VERSION, 'schema_version = ' . (prop_('SCHEMA_VERSION') ?? '?'), 'php = ' . PHP_VERSION, 'sqlite = ' . SQLite3::version()['versionString'],
     'time = ' . nowStr_(), 'months = ' . implode('、', listMonths_())];
-  foreach (['months', 'slots', 'roster', 'notes', 'open_days', 'users', 'log'] as $t) $o[] = $t . ' = ' . q1_("SELECT COUNT(*) AS n FROM $t")['n'] . ' 列';
+  foreach (['months', 'slots', 'roster', 'notes', 'open_days', 'users', 'sso', 'log'] as $t) $o[] = $t . ' = ' . q1_("SELECT COUNT(*) AS n FROM $t")['n'] . ' 列';
+  $o[] = 'sso_enabled = ' . (implode('、', ssoEnabled_()) ?: '無');
   $lk = lockState_(); $o[] = 'lock = ' . ($lk['locked'] ? $lk['month'] : '無');
   return implode("\n", $o) . "\n";
 }

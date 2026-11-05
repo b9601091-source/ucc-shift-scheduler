@@ -4,7 +4,7 @@
  * 換組織只改這個檔；lib/ 其他檔案與 index.html 不含任何組織字串。 */
 if (!defined('UCC')) { http_response_code(404); exit; }
 
-const APP_VERSION = '1.0.2';
+const APP_VERSION = '1.1.0';
 const SCHEMA_VERSION = 1;
 
 /** 頁尾「更新紀錄」：每則＝粗體標題＋一句話；同日彙整一則，新的在上 */
@@ -18,7 +18,8 @@ function CFG() {
   static $c = null;
   if ($c) return $c;
   $c = [
-    'DB_FILE' => 'ucc.sqlite',
+    'DB_FILE' => is_file(__DIR__ . '/db_name.php') ? (string)(include __DIR__ . '/db_name.php') : 'ucc.sqlite',  // 線上用隨機檔名（deploy 產生，不進版控）
+    'DB_FILE_LEGACY' => 'ucc.sqlite',
     'TZ' => 'Asia/Taipei',
 
     /* ---------- 帳號與登入 ---------- */
@@ -27,6 +28,9 @@ function CFG() {
     'LOGIN_MAX_FAIL' => 10,          // 連續密碼錯誤幾次就鎖定
     'LOGIN_LOCK_MIN' => 10,          // 鎖定幾分鐘
     'LOGIN_FAIL_WINDOW_MIN' => 10,   // 超過幾分鐘沒再錯就把次數歸零
+    // 快速登入（LINE／Google）：金鑰在 lib/sso_keys.php（用 php/set_sso_keys.ps1 產生，不進版本庫）；沒有金鑰就不顯示按鈕
+    'SSO_TOKEN_DAYS' => 7,           // 快速登入的憑證有效天數（比密碼登入短）
+    'SSO_BASE_URL' => '',            // 留空＝依請求自動推算；主機在反向代理後面推算不準時才填，例：https://www.example.org/web/ucc/
 
     // 超級管理者：全部後臺功能＋唯一能「授權」的人（順位裡的姓名或會務帳號名稱皆可）
     'ADMIN_NAMES' => ['會務人員'],

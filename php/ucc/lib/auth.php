@@ -23,8 +23,8 @@ function setUser_($name, $fields) {
   x_('INSERT INTO users (name, pw_hash, perms, updated) VALUES (?,?,?,?) ON CONFLICT(name) DO UPDATE SET pw_hash = excluded.pw_hash, perms = excluded.perms, updated = excluded.updated',
      [$name, (string)$u['pw_hash'], (string)$u['perms'], nowStr_()]);
 }
-function makeToken_($name) {
-  $body = $name . '|' . (nowMs_() + CFG()['TOKEN_DAYS'] * 86400000);
+function makeToken_($name, $days = null) {
+  $body = $name . '|' . (nowMs_() + ($days ?: CFG()['TOKEN_DAYS']) * 86400000);
   return $body . '|' . hash_hmac('sha256', $body, secret_());
 }
 /** token 有效就回姓名，否則 null */
@@ -178,7 +178,8 @@ function apiAdminResetPw($p = []) {
 }
 function apiAdminPwStatus($p = []) {
   if ($d = requireAdmin_($p, 'resetpw')) return $d;
-  return ['ok' => true, 'rows' => array_map(function ($n) { return ['name' => $n, 'isDefault' => isDefaultPw_($n), 'lockedMin' => lockedOutMin_($n)]; }, rosterNames_())];
+  return ['ok' => true, 'rows' => array_map(function ($n) { return ['name' => $n, 'isDefault' => isDefaultPw_($n), 'lockedMin' => lockedOutMin_($n),
+    'sso' => array_map(function ($r) { return $r['provider']; }, ssoBindingsOf_($n))]; }, rosterNames_())];
 }
 function apiAdminUsers($p = []) {
   $who = actorOf_($p);
