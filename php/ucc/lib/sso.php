@@ -10,7 +10,8 @@ if (!defined('UCC')) { http_response_code(404); exit; }
 
 function ssoKeys_() {
   static $file = null;
-  if ($file === null) { $f = __DIR__ . '/sso_keys.php'; $file = is_file($f) ? (array)(include $f) : []; }
+  if (!empty($GLOBALS['UCC_SSO_NO_FILE'])) $file = [];   // 測試：不讀真實金鑰檔
+  elseif ($file === null) { $f = __DIR__ . '/sso_keys.php'; $file = is_file($f) ? (array)(include $f) : []; }
   $k = (!empty($GLOBALS['UCC_SSO_KEYS']) ? (array)$GLOBALS['UCC_SSO_KEYS'] : []) + $file;   // 測試可用 $GLOBALS 覆蓋
   return $k + ['line_channel_id' => '', 'line_channel_secret' => '', 'google_client_id' => ''];
 }

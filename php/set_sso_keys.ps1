@@ -1,4 +1,4 @@
-<#
+﻿<#
   UCC 排班系統 — 設定 LINE／Google 快速登入的金鑰（寫到 php\ucc\lib\sso_keys.php，不進版本庫；deploy_ucc.ps1 會一起上傳）
   用法（在 PowerShell 執行，密鑰用隱藏輸入，不會留在畫面或歷史）：
     powershell -ExecutionPolicy Bypass -File "C:\Users\USER\我的雲端硬碟\claude\20260812 UCC排班網頁\php\set_sso_keys.ps1"

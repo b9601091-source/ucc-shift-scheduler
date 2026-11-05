@@ -5,6 +5,7 @@ define('UCC', 1);
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 $LIB = dirname(__DIR__) . '/ucc/lib';
+$GLOBALS['UCC_SSO_NO_FILE'] = 1;   // 測試不讀真實的 lib/sso_keys.php（正式金鑰裝好後「沒金鑰」案例才不會假失敗）
 require $LIB . '/' . (is_file($LIB . '/config.php') ? 'config' : 'config.example') . '.php';
 foreach (['core', 'auth', 'sched', 'admin', 'sso'] as $f) require $LIB . '/' . $f . '.php';
 date_default_timezone_set(CFG()['TZ']);
