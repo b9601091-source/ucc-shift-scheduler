@@ -1,7 +1,7 @@
 # UCC 排班系統需要 PHP 8.0 以上。主機預設版本太舊時，依主機商說明切換（cPanel 的 MultiPHP／PHP Selector，
 # 或像下面這樣在本資料夾指定 handler；名稱各家不同，填錯可能讓 .php 原始碼被當純文字送出，務必上線後檢查）。
 # <IfModule mime_module>
-#   AddHandler application/x-httpd-alt-php82___lsphp .php
+#   AddHandler application/x-httpd-alt-php83___lsphp .php
 # </IfModule>
 <IfModule LiteSpeed>
   php_value post_max_size 20M

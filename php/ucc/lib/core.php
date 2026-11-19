@@ -200,6 +200,43 @@ function createNextMonth_($by) {
   return ['ok' => true, 'month' => $target];
 }
 
+/** 年度開設日期表：每批套用一次（測試可用 $GLOBALS['UCC_OPEN_DAY_BATCHES'] 覆蓋）。
+ *  還沒有任何月份時（剛裝好、等整批搬移）先不套用，資料進來後的下一次請求才套用。 */
+function openDayBatches_() {
+  if (array_key_exists('UCC_OPEN_DAY_BATCHES', $GLOBALS)) return (array)$GLOBALS['UCC_OPEN_DAY_BATCHES'];
+  return function_exists('OPEN_DAY_BATCHES') ? OPEN_DAY_BATCHES() : [];
+}
+function applyOpenDayBatches_() {
+  foreach (openDayBatches_() as $b) {
+    $key = 'OPEN_DAYS_BATCH_' . $b['id'];
+    if (prop_($key) !== null || !listMonths_()) continue;
+    withLock_(function () use ($b, $key) {
+      if (prop_($key) !== null) return;
+      foreach ($b['days'] as $d) x_('INSERT OR REPLACE INTO open_days (iso, open, note) VALUES (?,?,?)', [(string)$d[0], (int)$d[1] ? 1 : 0, (string)($d[2] ?? '')]);
+      $made = [];
+      if (!empty($b['through'])) {
+        $target = (int)$b['through'][0] * 100 + (int)$b['through'][1];
+        for ($i = 0; $i < 24; $i++) {
+          $all = listMonths_();
+          if (!$all || decodeMonth_($all[0])['key'] >= $target) break;
+          $r = createNextMonth_('系統');
+          if (!$r['ok']) break;
+          $made[] = $r['month'];
+        }
+      }
+      // 月份建好後再改格子：既有月份與新月份一起照表（週日要關的也在這裡關；已有人填的不動）
+      $nOpen = 0; $nClose = 0;
+      foreach ($b['days'] as $d) {
+        $iso = (string)$d[0];
+        if ((int)$d[1]) { x_('UPDATE slots SET closed = 0, name = \'\' WHERE iso = ? AND closed = 1', [$iso]); $nOpen++; }
+        else { x_('UPDATE slots SET closed = 1 WHERE iso = ? AND closed = 0 AND name = \'\'', [$iso]); $nClose++; }
+      }
+      setProp_($key, jenc_(['at' => nowStr_(), 'made' => $made]));
+      log_('套用開設日期表', implode('、', $made), '', '', '系統', ($b['source'] ?? $b['id']) . '：開放 ' . $nOpen . ' 天、不開設 ' . $nClose . ' 天' . ($made ? '；建立 ' . count($made) . ' 個月份' : ''));
+    });
+  }
+}
+
 /* ================= 第一次建置 ================= */
 function ensureSetup_() {
   ensureSchema_();
@@ -212,6 +249,7 @@ function ensureSetup_() {
     withLock_(function () use ($roc, $m, $order) { writeMonth_(encodeMonth_($roc, $m), $order, ''); });
     log_('建立初始月份', encodeMonth_($roc, $m), '', '', '系統', 'SETUP_ROSTER ' . count($order) . ' 人');
   }
+  applyOpenDayBatches_();
 }
 
 /* ================= 診斷 ================= */

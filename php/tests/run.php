@@ -15,6 +15,7 @@ set_error_handler(function ($no, $str, $file, $line) {
   throw new ErrorException($str, 0, $no, $file, $line);
 });
 $PASS = 0; $FAILS = 0;
+$GLOBALS['UCC_OPEN_DAY_BATCHES'] = [];   // 一般測試不套用年度開設表；開設表另有一段測試
 function j_($v) { $s = json_encode($v, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR); return strlen($s) > 900 ? substr($s, 0, 900) . '…' : $s; }
 function ok($cond, $label, $extra = null) { global $PASS, $FAILS; if ($cond) { $PASS++; return; } $FAILS++; echo '✗ ' . $label . (func_num_args() >= 3 ? '  → ' . j_($extra) : '') . "\n"; }
 class Env {
@@ -362,6 +363,60 @@ $I->apiRosterRemove(['token' => $tZi, 'name' => '王小明']);
 $I->use_();
 ok(count(qa_('SELECT * FROM sso WHERE name = ?', ['王小明'])) === 0, '移除人員連綁定一起刪');
 unset($GLOBALS['UCC_SSO_HTTP'], $GLOBALS['UCC_SSO_KEYS']);
+
+/* ================= 開設日期表 ================= */
+echo "=== 開設日期表\n";
+$O = env('2026-11-19');
+$tO = $O->apiLogin(['seq' => 'Z', 'pw' => '0000'])['token'];
+$O->apiImportAll(['token' => $tO, 'data' => gasExport($NAMES, ['115/11', '115/12'], [['2026-12-27', 'am', '王小明']])]);
+$GLOBALS['UCC_OPEN_DAY_BATCHES'] = [['id' => 't1', 'source' => '測試表', 'through' => [116, 3], 'days' => [
+  ['2026-12-26', 1, '週六開'], ['2026-12-20', 0, '週日沒人填→關'], ['2026-12-27', 0, '週日有人填→不動'],
+  ['2027-01-01', 0, '不開設'], ['2027-01-02', 1, '連假'], ['2027-01-03', 0, '週日也能關']]]];
+$O->ensureSetup_();
+$names = function ($C) { return array_map(function ($m) { return $m['name']; }, $C->apiGetBootstrap([])['months']); };
+ok($names($O) === ['116/03', '116/02', '116/01', '115/12', '115/11'], '一路建到 116/03', $names($O));
+$tA2 = $O->apiLogin(['seq' => 'A', 'pw' => '0000'])['token'];
+$dayOpen = function ($C, $tok, $mn, $iso) { foreach ($C->apiGetMonth(['token' => $tok, 'month' => $mn])['days'] as $d) if ($d['iso'] === $iso && $d['inMonth']) return $d['open']; return null; };
+ok($dayOpen($O, $tA2, '115/12', '2026-12-26') === true && $dayOpen($O, $tA2, '115/12', '2026-12-20') === false, '既有月份：週六改開、沒人填的週日改關');
+$m12 = $O->apiGetMonth(['token' => $tA2, 'month' => '115/12']);
+$am27 = null; foreach ($m12['days'] as $d) if ($d['iso'] === '2026-12-27') $am27 = $d['am'];
+ok($dayOpen($O, $tA2, '115/12', '2026-12-27') === true && strpos(json_encode($am27, JSON_UNESCAPED_UNICODE), '王') !== false, '已有人填的格子不動', $am27);
+ok($dayOpen($O, $tA2, '116/01', '2027-01-02') === true && $dayOpen($O, $tA2, '116/01', '2027-01-01') === false && $dayOpen($O, $tA2, '116/01', '2027-01-03') === false && $dayOpen($O, $tA2, '116/01', '2027-01-10') === true, '新月份照表：1/2 開、1/1 與 1/3 關、其他週日開');
+$o12 = array_map(function ($x) { return $x['seq']; }, $O->apiGetMonth(['token' => $tA2, 'month' => '115/12'])['order']);
+$o01 = array_map(function ($x) { return $x['seq']; }, $O->apiGetMonth(['token' => $tA2, 'month' => '116/01'])['order']);
+ok($o01 === array_merge(array_slice($o12, 1), array_slice($o12, 0, 1)), '順位逐月左移一位', [$o12, $o01]);
+$O->ensureSetup_(); $O->ensureSetup_();
+$O->use_();
+ok(count($names($O)) === 5 && (int)q1_("SELECT COUNT(*) AS n FROM log WHERE action = '套用開設日期表'")['n'] === 1, '同一批只套用一次');
+ok(json_decode(prop_('OPEN_DAYS_BATCH_t1'), true)['made'] === ['116/01', '116/02', '116/03'], '套用紀錄記下建了哪些月份');
+$GLOBALS['UCC_OPEN_DAY_BATCHES'][] = ['id' => 't2', 'source' => '只改開放日', 'through' => null, 'days' => [['2027-01-01', 1, '改開']]];
+$O->ensureSetup_();
+ok(count($names($O)) === 5 && $dayOpen($O, $tA2, '116/01', '2027-01-01') === true, '新批次：只改開放日、不建月份');
+// 沒有月份時不套用（等整批搬移）
+$GLOBALS['UCC_OPEN_DAY_BATCHES'] = [['id' => 't3', 'through' => [116, 1], 'days' => [['2027-01-02', 1, 'x']]]];
+$P = env('2026-11-19');
+$P->use_();
+ok(prop_('OPEN_DAYS_BATCH_t3') === null && !listMonths_(), '沒有月份時先不套用');
+// 正式設定檔的 116 年開設表：逐月開放天數要對得上開設日期表（藍＋綠、扣掉打叉）
+$real = function_exists('OPEN_DAY_BATCHES') ? OPEN_DAY_BATCHES() : [];
+if ($real) {
+  $GLOBALS['UCC_OPEN_DAY_BATCHES'] = [];
+  $Q = env('2026-11-19');
+  $tQ = $Q->apiLogin(['seq' => 'Z', 'pw' => '0000'])['token'];
+  $Q->apiImportAll(['token' => $tQ, 'data' => gasExport($NAMES, ['115/12'])]);
+  $GLOBALS['UCC_OPEN_DAY_BATCHES'] = $real;
+  $Q->ensureSetup_();
+  $tQA = $Q->apiLogin(['seq' => 'A', 'pw' => '0000'])['token'];
+  $cnt = [];
+  for ($mm = 1; $mm <= 12; $mm++) {
+    $md = $Q->apiGetMonth(['token' => $tQA, 'month' => encodeMonth_(116, $mm)]);
+    $cnt[] = count(array_filter($md['days'] ?? [], function ($d) { return $d['inMonth'] && $d['open']; }));
+  }
+  ok($cnt === [6, 10, 5, 6, 6, 4, 4, 5, 4, 7, 4, 5], '116 年各月開放天數＝開設日期表（共 66 天）', $cnt);
+  $isos = array_map(function ($d) { return $d[0]; }, $real[0]['days']);
+  ok(count($isos) === count(array_unique($isos)) && !array_filter($real[0]['days'], function ($d) { return (int)$d[1] === 1 && dow_($d[0]) === 0; }), '開設表沒有重複日期、不必列週日');
+}
+$GLOBALS['UCC_OPEN_DAY_BATCHES'] = [];
 
 foreach (Env::$all as $e) { foreach (glob($e->dir . '/*') as $f) @unlink($f); @rmdir($e->dir); }
 echo "通過 {$PASS}／失敗 {$FAILS}\n";
