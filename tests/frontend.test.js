@@ -93,7 +93,9 @@ run('pharm', [], (w, D) => {
     console.log('\n=== 超級管理者');
     ok(vis(D2.getElementById('admCard')), '看得到後臺');
     const subs = [...D2.querySelectorAll('#admCard details.sub[data-perm]')];
-    ok(subs.length === 10 && subs.every(vis), '10 個分項全部顯示（含資料備份）', subs.map(s => s.getAttribute('data-perm') + (vis(s) ? '' : '✗')));
+    const gasSubs = subs.filter(s => s.id !== 'staffSub');   // 「管理人員」只有 PHP 版有，Apps Script 版要隱藏
+    ok(gasSubs.length === 10 && gasSubs.every(vis), '10 個分項全部顯示（含資料備份）', subs.map(s => s.getAttribute('data-perm') + (vis(s) ? '' : '✗')));
+    ok(subs.some(s => s.id === 'staffSub') && !vis(subs.find(s => s.id === 'staffSub')), 'Apps Script 版不顯示「管理人員」');
     // 展開權限授權 → 抓名單
     const grant = subs.find(s => s.getAttribute('data-perm') === 'grant');
     grant.open = true; grant.dispatchEvent(new w2.Event('toggle'));

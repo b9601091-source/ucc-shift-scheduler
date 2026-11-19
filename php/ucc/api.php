@@ -45,6 +45,7 @@ const API_MAP = [
   'adminResetPw' => 'apiAdminResetPw', 'adminPwStatus' => 'apiAdminPwStatus', 'adminUsers' => 'apiAdminUsers', 'setPerms' => 'apiSetPerms',
   'rosterAdd' => 'apiRosterAdd', 'rosterRemove' => 'apiRosterRemove', 'getUiSettings' => 'apiGetUiSettings', 'saveUiSettings' => 'apiSaveUiSettings',
   'exportAll' => 'apiExportAll', 'importAll' => 'apiImportAll', 'exportXlsx' => 'apiExportXlsx',
+  'staffAdd' => 'apiStaffAdd', 'staffRemove' => 'apiStaffRemove',
   'ssoList' => 'apiSsoList', 'ssoBindTicket' => 'apiSsoBindTicket', 'ssoUnbind' => 'apiSsoUnbind', 'adminSsoUnbind' => 'apiAdminSsoUnbind',
 ];
 

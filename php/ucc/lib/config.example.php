@@ -4,7 +4,7 @@
  * 換組織只改這個檔；lib/ 其他檔案與 index.html 不含任何組織字串。 */
 if (!defined('UCC')) { http_response_code(404); exit; }
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 const SCHEMA_VERSION = 1;
 
 /** 頁尾「更新紀錄」：每則＝粗體標題＋一句話；同日彙整一則，新的在上 */
@@ -38,7 +38,7 @@ function CFG() {
     // 超級管理者：全部後臺功能＋唯一能「授權」的人（順位裡的姓名或會務帳號名稱皆可）
     'ADMIN_NAMES' => ['會務人員'],
     // 不參與排班的帳號：有自己的密碼、能看、不能填班交棒、可被授權後臺功能
-    'STAFF_ACCOUNTS' => [['seq' => 'Z', 'name' => '會務人員']],
+    'STAFF_ACCOUNTS' => [['seq' => 'Z', 'name' => '會務人員']],   // 職務帳號（登入頁顯示全名）；個人的管理人員帳號請在後臺「管理人員」新增
 
     /* ---------- 排班規則的數字 ---------- */
     'DEADLINE_DAY' => 15,

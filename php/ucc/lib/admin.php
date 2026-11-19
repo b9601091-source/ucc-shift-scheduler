@@ -1,8 +1,8 @@
 <?php
-/* 增減人員、整批搬移（匯入 Apps Script 版匯出的 JSON）、備份匯出（JSON）、Excel 匯出 */
+/* 增減排班人員、管理人員、整批搬移（匯入 Apps Script 版匯出的 JSON）、備份匯出（JSON）、Excel 匯出 */
 if (!defined('UCC')) { http_response_code(404); exit; }
 
-/* ================= 增減人員 ================= */
+/* ================= 增減排班人員 ================= */
 function apiRosterAdd($p = []) {
   if ($d = requireAdmin_($p, 'roster')) return $d;
   $name = str_($p['name'] ?? '');
@@ -23,7 +23,7 @@ function apiRosterAdd($p = []) {
       x_('INSERT INTO roster (month, pos, seq, name, done) VALUES (?,?,?,?,0)', [$mn, $max + 1, $seq, $name]);
       $done[] = $mn;
     }
-    log_('新增人員', implode('、', $done), '', '', $name, '代號 ' . $seq . '（操作者 ' . actorOf_($p) . '）');
+    log_('新增排班人員', implode('、', $done), '', '', $name, '代號 ' . $seq . '（操作者 ' . actorOf_($p) . '）');
     return ['ok' => true, 'seq' => $seq, 'msg' => '已將 ' . $name . ' 加入順位最後（代號 ' . $seq . '）：' . implode('、', $done)];
   });
 }
@@ -32,7 +32,7 @@ function apiRosterRemove($p = []) {
   $name = str_($p['name'] ?? '');
   if ($name === '') return ['ok' => false, 'msg' => '請選擇要移除的人'];
   if (isAdminUser_($name)) return ['ok' => false, 'msg' => $name . ' 是超級管理者，請先在 config.php 的 ADMIN_NAMES 拿掉'];
-  if (isReadOnly_($name)) return ['ok' => false, 'msg' => $name . ' 是會務人員帳號，要拿掉請改 config.php 的 STAFF_ACCOUNTS'];
+  if (isReadOnly_($name)) return ['ok' => false, 'msg' => $name . ' 是管理人員帳號，請到「管理人員」移除'];
   $months = affectedMonths_();
   if (!$months) return ['ok' => false, 'msg' => '沒有本月或之後的月份'];
   return withLock_(function () use ($name, $months, $p) {
@@ -50,8 +50,49 @@ function apiRosterRemove($p = []) {
     x_('DELETE FROM users WHERE name = ?', [$name]);
     x_('DELETE FROM sso WHERE name = ?', [$name]);
     clearFail_($name);
-    log_('移除人員', implode('、', $done), '', '', $name, '（操作者 ' . actorOf_($p) . '）');
+    log_('移除排班人員', implode('、', $done), '', '', $name, '（操作者 ' . actorOf_($p) . '）');
     return ['ok' => true, 'msg' => '已將 ' . $name . ' 移出順位：' . (implode('、', $done) ?: '（沒有月份需要改）') . '。歷史月份的紀錄不受影響'];
+  });
+}
+
+/* ================= 管理人員（不參與排班的個人帳號；只有超級管理者能增減） ================= */
+function apiStaffAdd($p = []) {
+  if ($d = requireSuper_($p)) return $d;
+  $name = preg_replace('/\s+/u', '', str_replace(['<', '>'], '', str_($p['name'] ?? '')));
+  $title = trim(str_replace(['<', '>', '（', '）', '(', ')'], '', str_($p['title'] ?? '')));
+  if ($name === '') return ['ok' => false, 'msg' => '請輸入姓名'];
+  if (ulen_($name) > 12) return ['ok' => false, 'msg' => '姓名太長了'];
+  if (ulen_($title) > 8) return ['ok' => false, 'msg' => '職稱最多 8 個字'];
+  if (in_array($name, rosterNames_(), true)) return ['ok' => false, 'msg' => '名單裡已經有「' . $name . '」'];
+  if (isAdminUser_($name)) return ['ok' => false, 'msg' => $name . ' 是超級管理者'];
+  return withLock_(function () use ($name, $title, $p) {
+    $used = []; foreach (rosterList_() as $r) $used[strtoupper($r['seq'])] = true;
+    $seq = '';
+    for ($c = 90; $c >= 65 && !$seq; $c--) if (empty($used[chr($c)])) $seq = chr($c);   // 從 Z 往前取，排班人員從 A 往後取
+    if (!$seq) return ['ok' => false, 'msg' => '代號 A~Z 已經用完'];
+    $list = staffExtra_();
+    $list[] = ['seq' => $seq, 'name' => $name, 'title' => $title];
+    setProp_('STAFF_EXTRA', jenc_($list));
+    x_('DELETE FROM users WHERE name = ?', [$name]);   // 同名舊資料（例如以前排過班）不沿用密碼與授權
+    x_('DELETE FROM sso WHERE name = ?', [$name]);
+    clearFail_($name);
+    log_('新增管理人員', '', '', '', $name, '代號 ' . $seq . ($title !== '' ? '、' . $title : '') . '（操作者 ' . actorOf_($p) . '）');
+    return ['ok' => true, 'seq' => $seq, 'msg' => '已新增管理人員 ' . $name . ($title !== '' ? '（' . $title . '）' : '') . '，代號 ' . $seq . '。請通知本人用預設密碼登入並立即修改'];
+  });
+}
+function apiStaffRemove($p = []) {
+  if ($d = requireSuper_($p)) return $d;
+  $name = str_($p['name'] ?? '');
+  if (isCfgStaff_($name)) return ['ok' => false, 'msg' => $name . ' 是設定檔裡的職務帳號，要拿掉請改 config.php 的 STAFF_ACCOUNTS'];
+  $list = staffExtra_(); $keep = array_values(array_filter($list, function ($a) use ($name) { return $a['name'] !== $name; }));
+  if (count($keep) === count($list)) return ['ok' => false, 'msg' => '管理人員裡沒有「' . $name . '」'];
+  return withLock_(function () use ($name, $keep, $p) {
+    if ($keep) setProp_('STAFF_EXTRA', jenc_($keep)); else delProp_('STAFF_EXTRA');
+    x_('DELETE FROM users WHERE name = ?', [$name]);
+    x_('DELETE FROM sso WHERE name = ?', [$name]);
+    clearFail_($name);
+    log_('移除管理人員', '', '', '', $name, '（操作者 ' . actorOf_($p) . '）');
+    return ['ok' => true, 'msg' => '已移除管理人員 ' . $name . '，他的密碼、授權與快速登入綁定一併清除'];
   });
 }
 
@@ -69,7 +110,7 @@ function exportAll_() {
     $months[] = ['name' => $mn, 'days' => array_values($days), 'order' => array_map(function ($o) { return ['seq' => $o['seq'], 'name' => $o['name'], 'done' => $o['done']]; }, order_($mn)), 'notes' => notes_($mn)];
   }
   $props = [];
-  foreach (qa_('SELECT k, v FROM _props') as $r) if ($r['k'] === 'AUTH_SECRET' || $r['k'] === 'LOCK' || $r['k'] === 'UI_OVERRIDE') $props[$r['k']] = $r['v'];
+  foreach (qa_('SELECT k, v FROM _props') as $r) if (in_array($r['k'], ['AUTH_SECRET', 'LOCK', 'UI_OVERRIDE', 'STAFF_EXTRA'], true) || strpos($r['k'], 'OPEN_DAYS_BATCH_') === 0) $props[$r['k']] = $r['v'];
   foreach (qa_('SELECT name, pw_hash, perms FROM users') as $u) {
     if (str_($u['pw_hash']) !== '') $props['pw_' . $u['name']] = $u['pw_hash'];
     if (str_($u['perms']) !== '') $props['perm_' . $u['name']] = $u['perms'];
@@ -130,6 +171,8 @@ function importAll_($j, $replace) {
   if (!empty($props['AUTH_SECRET'])) setProp_('AUTH_SECRET', (string)$props['AUTH_SECRET']);
   if (!empty($props['LOCK'])) setProp_('LOCK', (string)$props['LOCK']);
   if (!empty($props['UI_OVERRIDE'])) setProp_('UI_OVERRIDE', (string)$props['UI_OVERRIDE']);
+  if (!empty($props['STAFF_EXTRA'])) setProp_('STAFF_EXTRA', (string)$props['STAFF_EXTRA']);
+  foreach ($props as $k => $v) if (strpos((string)$k, 'OPEN_DAYS_BATCH_') === 0) setProp_((string)$k, (string)$v);
   $users = [];
   foreach ($props as $k => $v) {
     if (strpos($k, 'pw_') === 0) $users[substr($k, 3)]['pw_hash'] = (string)$v;

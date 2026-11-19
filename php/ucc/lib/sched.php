@@ -19,7 +19,9 @@ function apiGetBootstrap($p = []) {
   $out['lock'] = lockState_();
   $out['currentMonth'] = currentMonthSheet_();
   if ($out['lock']['locked'] && $out['currentMonth']) $out['defaultMonth'] = $out['currentMonth'];
-  $out['roster'] = array_map(function ($r) { return ['seq' => $r['seq'], 'label' => fwSeq_($r['seq']) . '．' . (isReadOnly_($r['name']) ? $r['name'] : maskName_($r['name']))]; }, rosterList_());
+  $out['roster'] = array_map(function ($r) { $t = staffTitle_($r['name']);
+    return ['seq' => $r['seq'], 'label' => fwSeq_($r['seq']) . '．' . (isCfgStaff_($r['name']) ? $r['name'] : maskName_($r['name'])) . ($t !== '' ? '（' . $t . '）' : '')]; }, rosterList_());
+  $out['staffAdmin'] = true;   // PHP 版才有後臺「管理人員」
   return $out;
 }
 function apiGetMonth($p = []) {

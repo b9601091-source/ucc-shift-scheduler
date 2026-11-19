@@ -528,7 +528,7 @@
               <div class="hint">重設後該員要用預設密碼重新登入並自行修改。</div>
             </div></details>
 
-            <details class="sub" data-perm="roster"><summary>增減人員</summary><div class="subbody">
+            <details class="sub" data-perm="roster"><summary>增減排班人員</summary><div class="subbody">
               <div class="rlist" id="rosterList">—</div>
               <div class="row" style="margin-top:9px">
                 <input class="txt" id="rosterNew" placeholder="新進人員姓名" maxlength="12" style="flex:1;min-width:120px">
@@ -536,6 +536,17 @@
               </div>
               <div class="hint">新人放在順位最後、代號接著編；移除會從<b>本月起所有已建立的月份分頁</b>拿掉（歷史月份不動），
                 該員若還有班要先取消。加入後請通知本人用預設密碼登入。</div>
+            </div></details>
+
+            <details class="sub" data-perm="grant" id="staffSub"><summary>管理人員</summary><div class="subbody">
+              <div class="rlist" id="staffList">—</div>
+              <div class="row" style="margin-top:9px">
+                <input class="txt" id="staffNew" placeholder="姓名" maxlength="12" style="flex:1;min-width:100px">
+                <input class="txt" id="staffTitle" placeholder="職稱（選填，例：常務）" maxlength="8" style="flex:1;min-width:120px">
+                <button class="btn" id="btnStaffAdd">新增管理人員</button>
+              </div>
+              <div class="hint">管理人員有自己的帳號：可登入查看所有月份，不參與排班、不能填班，可自行綁定 LINE／Google 快速登入。
+                要讓他使用後臺功能，請到「權限授權」逐項勾選。新增後請通知本人用預設密碼登入並立即修改。</div>
             </div></details>
 
             <details class="sub" data-perm="brand"><summary>頁首頁尾文字</summary><div class="subbody">
@@ -1317,9 +1328,10 @@ function syncSubs(){
     var k=subs[i].getAttribute('data-perm');
     subs[i].style.display = (k==='grant' ? S.isSuper : !!S.perms[k]) ? '' : 'none';
   }
+  if($('staffSub') && !(S.boot && S.boot.staffAdmin)) $('staffSub').style.display='none';   // 只有 PHP 版有管理人員功能
 }
 
-/* 名單（增減人員、權限授權共用），每次展開時重抓 */
+/* 名單（增減排班人員、管理人員、權限授權共用），每次展開時重抓 */
 function loadUsers(cb){
   api('adminUsers', {token:S.token}).then(function(r){
     if(!r || !r.ok){ if(r&&r.needLogin){ showLogin(r.msg); return; } toast(r&&r.msg?r.msg:'讀取名單失敗'); return; }
@@ -1328,17 +1340,24 @@ function loadUsers(cb){
 }
 function renderUsers(){
   var r=S.users; if(!r) return;
-  $('rosterList').innerHTML = r.rows.map(function(u){
+  var hasStaffAdmin = !!(S.boot && S.boot.staffAdmin);
+  $('rosterList').innerHTML = r.rows.filter(function(u){ return !(hasStaffAdmin && u.staff); }).map(function(u){
     var tag = u.superAdmin ? '超級管理者' : (u.staff ? '不參與排班' : '');
     var rm = (u.superAdmin || u.staff) ? '' :
       '<button class="btn ghost rrm" data-name="'+u.name+'">移除</button>';
     return '<div class="rrow"><span class="rseq">'+u.seq+'</span><span class="rnm">'+u.name+'</span>'+
            (tag?'<span class="rtag">'+tag+'</span>':'')+rm+'</div>';
   }).join('') || '（名單是空的）';
+  if($('staffList')) $('staffList').innerHTML = r.rows.filter(function(u){ return u.staff; }).map(function(u){
+    var tag = u.superAdmin ? '超級管理者' : (u.cfgStaff ? '職務帳號' : '');
+    var rm = (u.superAdmin || u.cfgStaff) ? '' : '<button class="btn ghost srm" data-name="'+u.name+'">移除</button>';
+    return '<div class="rrow"><span class="rseq">'+u.seq+'</span><span class="rnm">'+u.name+(u.title?'（'+u.title+'）':'')+'</span>'+
+           (tag?'<span class="rtag">'+tag+'</span>':'')+rm+'</div>';
+  }).join('') || '（沒有管理人員）';
   if(r.isSuper){
     var cur=$('permUser').value;
     $('permUser').innerHTML = r.rows.filter(function(u){ return !u.superAdmin; }).map(function(u){
-      return '<option value="'+u.name+'">'+u.seq+'．'+u.name+(u.staff?'（不參與排班）':'')+'</option>'; }).join('');
+      return '<option value="'+u.name+'">'+u.seq+'．'+u.name+(u.title?'（'+u.title+'）':'')+(u.staff?'（不參與排班）':'')+'</option>'; }).join('');
     if(cur) $('permUser').value=cur;
     renderPermBoxes();
   }
@@ -1445,7 +1464,7 @@ $('btnPwStatus').onclick=function(){
   });
 };
 $('btnReload').onclick=function(){ loadMonth(S.month); };
-/* 增減人員、權限授權：展開分項時才抓名單 */
+/* 增減排班人員、管理人員、權限授權：展開分項時才抓名單 */
 (function(){
   var subs=document.querySelectorAll('#admCard details.sub[data-perm]');
   for(var i=0;i<subs.length;i++){
@@ -1469,12 +1488,35 @@ $('btnRosterAdd').onclick=function(){
 $('rosterList').onclick=function(e){
   var b=e.target.closest && e.target.closest('.rrm'); if(!b) return;
   var n=b.getAttribute('data-name');
-  modal('移除人員', '<p>將「<b>'+n+'</b>」移出順位（本月起所有已建立的月份分頁），並清除他的密碼與授權。</p>'+
+  modal('移除排班人員', '<p>將「<b>'+n+'</b>」移出順位（本月起所有已建立的月份分頁），並清除他的密碼與授權。</p>'+
     '<p style="font-size:13px;color:var(--sub)">歷史月份的班表與紀錄不會動。若他還有班，會先擋下來。</p>', '確定移除', function(){
       busy(true);
       api('rosterRemove', {token:S.token, name:n}).then(function(r){
         busy(false); toast(r&&r.msg?r.msg:'完成');
         if(r&&r.ok){ S.cache={}; boot(); }
+      }).catch(function(e){ busy(false); toast('連線失敗：'+(e&&e.message?e.message:e)); });
+    });
+};
+$('btnStaffAdd').onclick=function(){
+  var n=$('staffNew').value.trim(), t=$('staffTitle').value.trim();
+  if(!n){ toast('請輸入姓名'); return; }
+  modal('新增管理人員', '<p>替「<b>'+n+'</b>'+(t?'（'+t+'）':'')+'」建立管理人員帳號。</p>'+
+    '<p style="font-size:13px;color:var(--sub)">他可以登入查看所有月份、不參與排班，可自行綁定 LINE／Google 快速登入；後臺功能要另外到「權限授權」開放。建立後請通知本人用預設密碼登入並立即修改。</p>', '確定新增', function(){
+      busy(true);
+      api('staffAdd', {token:S.token, name:n, title:t}).then(function(r){
+        busy(false); toast(r&&r.msg?r.msg:'完成');
+        if(r&&r.ok){ $('staffNew').value=''; $('staffTitle').value=''; S.cache={}; boot(); loadUsers(); }
+      }).catch(function(e){ busy(false); toast('連線失敗：'+(e&&e.message?e.message:e)); });
+    });
+};
+$('staffList').onclick=function(e){
+  var b=e.target.closest && e.target.closest('.srm'); if(!b) return;
+  var n=b.getAttribute('data-name');
+  modal('移除管理人員', '<p>移除「<b>'+n+'</b>」的管理人員帳號，並清除他的密碼、授權與快速登入綁定。</p>', '確定移除', function(){
+      busy(true);
+      api('staffRemove', {token:S.token, name:n}).then(function(r){
+        busy(false); toast(r&&r.msg?r.msg:'完成');
+        if(r&&r.ok){ S.cache={}; boot(); loadUsers(); }
       }).catch(function(e){ busy(false); toast('連線失敗：'+(e&&e.message?e.message:e)); });
     });
 };

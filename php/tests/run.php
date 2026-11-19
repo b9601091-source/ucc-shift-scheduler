@@ -162,8 +162,8 @@ $au2 = $E->apiAdminUsers(['token' => $tA['token']]);
 ok(!$au2['ok'], 'A 不能看名單');
 ok(!$E->apiSetPerms(['token' => $tB['token'], 'name' => '王小明', 'perms' => ['lock']])['ok'], 'B 不能授權');
 
-/* ================= 8. 增減人員 ================= */
-echo "=== 增減人員\n";
+/* ================= 8. 增減排班人員 ================= */
+echo "=== 增減排班人員\n";
 $r = $E->apiRosterAdd(['token' => $tZ['token'], 'name' => '黃小婷']);
 ok($r['ok'] && $r['seq'] === 'D', '加入黃小婷 D', $r);
 $o = $E->apiGetMonth(['token' => $tA['token'], 'month' => '115/10'])['order'];
@@ -418,6 +418,44 @@ if ($real) {
   ok(count($isos) === count(array_unique($isos)) && !array_filter($real[0]['days'], function ($d) { return (int)$d[1] === 1 && dow_($d[0]) === 0; }), '開設表沒有重複日期、不必列週日');
 }
 $GLOBALS['UCC_OPEN_DAY_BATCHES'] = [];
+
+/* ================= 管理人員 ================= */
+echo "=== 管理人員\n";
+$M = env('2026-11-19');
+$tM = $M->apiLogin(['seq' => 'Z', 'pw' => '0000'])['token'];
+$M->apiImportAll(['token' => $tM, 'data' => gasExport($NAMES, ['116/01'])]);
+$tM = $M->apiLogin(['seq' => 'Z', 'pw' => '0000'])['token'];
+$tMA = $M->apiLogin(['seq' => 'A', 'pw' => '0000'])['token'];
+ok(!$M->apiStaffAdd(['token' => $tMA, 'name' => '鄭大同', 'title' => '常務'])['ok'], '一般人不能新增管理人員');
+$r = $M->apiStaffAdd(['token' => $tM, 'name' => ' 鄭 大同 ', 'title' => '常務']);
+ok($r['ok'] && $r['seq'] === 'Y', '超管新增管理人員，代號從 Z 往前取（Y）', $r);
+ok(!$M->apiStaffAdd(['token' => $tM, 'name' => '陳小美'])['ok'] && !$M->apiStaffAdd(['token' => $tM, 'name' => '鄭大同'])['ok'], '不能和排班人員或既有帳號同名');
+ok(!$M->apiStaffAdd(['token' => $tM, 'name' => '甲', 'title' => '一二三四五六七八九'])['ok'], '職稱最多 8 字');
+$lab = array_map(function ($x) { return $x['label']; }, $M->apiGetBootstrap([])['roster']);
+ok(in_array('Ｙ．鄭○同（常務）', $lab, true) && in_array('Ｚ．會務人員', $lab, true), '登入下拉：個人帳號遮罩加職稱、職務帳號全名', $lab);
+$tY = $M->apiLogin(['seq' => 'Y', 'pw' => '0000']);
+ok($tY['ok'] && $tY['readOnly'] === true, '管理人員用預設密碼登入、不參與排班', $tY);
+$M->use_();
+ok(ssoAllowed_('鄭大同') === true && ssoAllowed_('會務人員') === false, '管理人員可綁快速登入、超管不行');
+$r = $M->apiSubmitShift(['token' => $tY['token'], 'month' => '116/01', 'iso' => '2027-01-03', 'shift' => 'am']);
+ok(empty($r['ok']), '管理人員不能填班', $r);
+ok($M->apiSetPerms(['token' => $tM, 'name' => '鄭大同', 'perms' => ['lock']])['ok'], '可以被授權後臺功能');
+$u = $M->apiAdminUsers(['token' => $tM]);
+$row = null; foreach ($u['rows'] as $x) if ($x['name'] === '鄭大同') $row = $x;
+ok($row && $row['staff'] && !$row['cfgStaff'] && $row['title'] === '常務' && $row['perms'] === ['lock'], '名單帶出職稱、非設定檔帳號', $row);
+ok(!$M->apiRosterRemove(['token' => $tM, 'name' => '鄭大同'])['ok'], '增減排班人員不能移除管理人員');
+ok($M->apiRosterAdd(['token' => $tM, 'name' => '新排班'])['ok'] && seqToName_('D') === '新排班', '排班人員代號照舊從 A 往後取');
+$ex = $M->apiExportAll(['token' => $tM]);
+ok(strpos(json_encode($ex['data']['props'], JSON_UNESCAPED_UNICODE), '鄭大同') !== false, '備份含管理人員');
+ok(!$M->apiStaffRemove(['token' => $tM, 'name' => '會務人員'])['ok'], '設定檔的職務帳號不能從後臺移除');
+$r = $M->apiStaffRemove(['token' => $tM, 'name' => '鄭大同']);
+$M->use_();
+ok($r['ok'] && !isReadOnly_('鄭大同') && !userRow_('鄭大同') && seqToName_('Y') === '', '移除後帳號、授權一併清除', $r);
+$I2 = env('2026-11-19');
+$tI2 = $I2->apiLogin(['seq' => 'Z', 'pw' => '0000'])['token'];
+$I2->apiImportAll(['token' => $tI2, 'data' => $ex['data']]);
+$I2->use_();
+ok(seqToName_('Y') === '鄭大同' && staffTitle_('鄭大同') === '常務', '匯入備份還原管理人員');
 
 /* ================= 加入行事曆 ================= */
 echo "=== 加入行事曆\n";

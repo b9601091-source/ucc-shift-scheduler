@@ -42,13 +42,25 @@ function actorOf_($p) { return tokenName_($p['token'] ?? ''); }
 function needLogin_() { return ['ok' => false, 'needLogin' => true, 'msg' => '登入已過期，請重新登入']; }
 
 /* ---- 名單 ---- */
-function isReadOnly_($name) { foreach (CFG()['STAFF_ACCOUNTS'] as $a) if ($a['name'] === $name) return true; return false; }
+/** 管理人員（不參與排班）＝設定檔的職務帳號（STAFF_ACCOUNTS）＋後臺「管理人員」新增的個人帳號（_props STAFF_EXTRA） */
+function staffExtra_() {
+  return array_values(array_filter(jdec_(prop_('STAFF_EXTRA')), function ($a) { return is_array($a) && str_($a['name'] ?? '') !== '' && str_($a['seq'] ?? '') !== ''; }));
+}
+function staffAll_() {
+  $o = [];
+  foreach (CFG()['STAFF_ACCOUNTS'] as $a) $o[] = ['seq' => $a['seq'], 'name' => $a['name'], 'title' => '', 'cfg' => true];
+  foreach (staffExtra_() as $a) $o[] = ['seq' => (string)$a['seq'], 'name' => (string)$a['name'], 'title' => str_($a['title'] ?? ''), 'cfg' => false];
+  return $o;
+}
+function isReadOnly_($name) { foreach (staffAll_() as $a) if ($a['name'] === $name) return true; return false; }
+function isCfgStaff_($name) { foreach (CFG()['STAFF_ACCOUNTS'] as $a) if ($a['name'] === $name) return true; return false; }
+function staffTitle_($name) { foreach (staffAll_() as $a) if ($a['name'] === $name) return $a['title']; return ''; }
 /** 最新月份的順位＋會務帳號 */
 function rosterList_() {
   $out = []; $all = listMonths_();
   if ($all) foreach (order_($all[0]) as $o) if ($o['name'] !== '' && $o['seq'] !== '') $out[] = ['seq' => $o['seq'], 'name' => $o['name']];
   usort($out, function ($a, $b) { return strcmp($a['seq'], $b['seq']); });
-  foreach (CFG()['STAFF_ACCOUNTS'] as $a) $out[] = ['seq' => $a['seq'], 'name' => $a['name']];
+  foreach (staffAll_() as $a) $out[] = ['seq' => $a['seq'], 'name' => $a['name']];
   return $out;
 }
 function rosterNames_() { return array_map(function ($r) { return $r['name']; }, rosterList_()); }
@@ -86,7 +98,7 @@ function PERMS() {
   return [
     ['k' => 'lock', 'label' => '班表鎖定'], ['k' => 'notes', 'label' => '編輯注意事項'], ['k' => 'skip', 'label' => '標記逾期放棄'],
     ['k' => 'create', 'label' => '建立月份分頁'], ['k' => 'openday', 'label' => '編輯開放日'], ['k' => 'resetpw', 'label' => '使用者密碼重設'],
-    ['k' => 'roster', 'label' => '增減人員'], ['k' => 'manage', 'label' => '代管班表（取消他人的班、代交棒、鎖定期間仍可改）'],
+    ['k' => 'roster', 'label' => '增減排班人員'], ['k' => 'manage', 'label' => '代管班表（取消他人的班、代交棒、鎖定期間仍可改）'],
     ['k' => 'brand', 'label' => '頁首頁尾文字'],
   ];
 }
@@ -185,9 +197,10 @@ function apiAdminUsers($p = []) {
   $who = actorOf_($p);
   if (!$who) return needLogin_();
   $sup = isAdminUser_($who);
-  if (!$sup && !can_($who, 'roster')) return ['ok' => false, 'msg' => '你沒有「增減人員」的權限'];
+  if (!$sup && !can_($who, 'roster')) return ['ok' => false, 'msg' => '你沒有「增減排班人員」的權限'];
   $rows = array_map(function ($r) use ($sup) {
-    $o = ['seq' => $r['seq'], 'name' => $r['name'], 'staff' => isReadOnly_($r['name']), 'superAdmin' => isAdminUser_($r['name'])];
+    $o = ['seq' => $r['seq'], 'name' => $r['name'], 'staff' => isReadOnly_($r['name']), 'superAdmin' => isAdminUser_($r['name']),
+      'cfgStaff' => isCfgStaff_($r['name']), 'title' => staffTitle_($r['name'])];
     if ($sup) $o['perms'] = array_keys(grantedOf_($r['name']));
     return $o;
   }, rosterList_());
