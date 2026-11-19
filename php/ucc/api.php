@@ -1,7 +1,8 @@
 <?php
 /* UCC 排班系統（PHP 版）— 唯一對外 PHP 入口
  *   POST api.php  body={"fn":"getMonth","arg":{…}}  → 直接回該函式的結果（形狀與 Apps Script 版 google.script.run 相同）
- *   GET  api.php?diag=1 診斷（要管理金鑰：標頭 X-Diag-Key 或 &k=）；?smoke=1 煙霧測試 */
+ *   GET  api.php?diag=1 診斷（要管理金鑰：標頭 X-Diag-Key 或 &k=）；?smoke=1 煙霧測試
+ *   GET  api.php?ics=2027-01-17&s=pm 單一班的行事曆檔（不含姓名、不需登入；iPhone 點了會跳「加入行事曆」） */
 define('UCC', 1);
 error_reporting(E_ALL);
 ini_set('display_errors', '0');
@@ -52,6 +53,16 @@ try {
   if ($method === 'GET') {
     if (isset($_GET['diag'])) { ensureSetup_(); if (!diagKeyOk_()) text_('診斷頁需要管理金鑰', 403); text_(diagText_()); }
     if (isset($_GET['smoke'])) { ensureSetup_(); text_(smokeText_()); }
+    if (isset($_GET['ics'])) {
+      $iso = (string)$_GET['ics']; $sh = (string)($_GET['s'] ?? '');
+      $ics = icsText_($iso, $sh);
+      if ($ics === null) text_('行事曆參數錯誤', 400);
+      header('Content-Type: text/calendar; charset=utf-8');
+      header('Content-Disposition: inline; filename="ucc-' . str_replace('-', '', $iso) . '-' . $sh . '.ics"');
+      header('Cache-Control: no-store');
+      echo $ics;
+      exit;
+    }
     header('Location: ./', true, 302);
     exit;
   }

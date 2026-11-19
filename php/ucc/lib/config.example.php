@@ -4,7 +4,7 @@
  * 換組織只改這個檔；lib/ 其他檔案與 index.html 不含任何組織字串。 */
 if (!defined('UCC')) { http_response_code(404); exit; }
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const SCHEMA_VERSION = 1;
 
 /** 頁尾「更新紀錄」：每則＝粗體標題＋一句話；同日彙整一則，新的在上 */
@@ -31,6 +31,9 @@ function CFG() {
     // 快速登入（LINE／Google）：金鑰在 lib/sso_keys.php（用 php/set_sso_keys.ps1 產生，不進版本庫）；沒有金鑰就不顯示按鈕
     'SSO_TOKEN_DAYS' => 7,           // 快速登入的憑證有效天數（比密碼登入短）
     'SSO_BASE_URL' => '',            // 留空＝依請求自動推算；主機在反向代理後面推算不準時才填，例：https://www.example.org/web/ucc/
+    // 「我的班 → 📅 加入行事曆」：title 的 {班別} 換成早班／晚班；時間取 UI.shifts 的 hours；enabled=false 就不顯示
+    'CAL' => ['enabled' => true, 'title' => '假日急診 {班別}', 'location' => '',   // location 例：○○醫院
+              'note' => '班表異動以排班系統為準；取消或換班請自行刪除這個行程。'],
 
     // 超級管理者：全部後臺功能＋唯一能「授權」的人（順位裡的姓名或會務帳號名稱皆可）
     'ADMIN_NAMES' => ['會務人員'],

@@ -9,7 +9,7 @@ function apiGetBootstrap($p = []) {
     'rules' => ['maxShifts' => CFG()['MAX_SHIFTS_PER_MONTH'], 'maxConsecutive' => CFG()['MAX_CONSECUTIVE_DAYS'], 'deadlineDay' => CFG()['DEADLINE_DAY'],
       'openDay' => CFG()['OPEN_DAY'], 'maxFail' => CFG()['LOGIN_MAX_FAIL'], 'lockMin' => CFG()['LOGIN_LOCK_MIN']],
     'ui' => effectiveUi_() + ['pilotNote' => CFG()['PILOT_NOTE'], 'appVersion' => APP_VERSION, 'changelog' => CHANGELOG()],
-    'sso' => ssoEnabled_()];
+    'sso' => ssoEnabled_(), 'cal' => calConfig_()];
   // 預設顯示「次月」
   $t = todayIso_(); $dRoc = (int)substr($t, 0, 4) - 1911; $dMon = (int)substr($t, 5, 2) + 1;
   if ($dMon > 12) { $dMon = 1; $dRoc++; }
@@ -175,4 +175,58 @@ function apiCreateMonthsThrough($p = []) {
   }
   log_('連續建立月份', implode('、', $made), '', '', actorOf_($p), '目標 ' . $roc . '/' . $mon);
   return ['ok' => true, 'made' => $made, 'msg' => $made ? '已建立 ' . count($made) . ' 個月份：' . implode('、', $made) : '目標月份已經存在，沒有需要新增的'];
+}
+
+/* ================= 加入行事曆 ================= */
+/** 前端用的行事曆設定（沒設定或 enabled=false 回 null＝不顯示「我的班」卡片） */
+function calConfig_() {
+  $c = CFG()['CAL'] ?? null;
+  if (!$c || empty($c['enabled'])) return null;
+  $url = function_exists('ssoBaseUrl_') ? ssoBaseUrl_() : '';
+  return ['title' => (string)($c['title'] ?? '{班別}'), 'location' => (string)($c['location'] ?? ''), 'tz' => CFG()['TZ'],
+    'details' => trim((string)($c['note'] ?? '') . ($url ? "\n" . $url : '')), 'ics' => true];
+}
+/** 班別起訖（本地時間）：UI.shifts.hours 寫成 0800~1600、16:00-24:00 都可 */
+function calShiftTimes_($iso, $sh) {
+  $h = (string)(CFG()['UI']['shifts'][$sh]['hours'] ?? '');
+  if (!preg_match('/(\d{1,2}):?(\d{2})\D+(\d{1,2}):?(\d{2})/', $h, $m)) return null;
+  $tz = new DateTimeZone(CFG()['TZ']);
+  $s = new DateTimeImmutable($iso . ' 00:00:00', $tz);
+  $start = $s->modify('+' . (int)$m[1] . ' hours +' . (int)$m[2] . ' minutes');
+  $end = $s->modify('+' . (int)$m[3] . ' hours +' . (int)$m[4] . ' minutes');   // 24:00＝隔天 00:00
+  if ($end <= $start) $end = $end->modify('+1 day');
+  return [$start, $end];
+}
+function icsEsc_($s) { return str_replace(["\\", ';', ',', "\r\n", "\n"], ["\\\\", '\;', '\,', '\n', '\n'], (string)$s); }
+/** 每行最多 75 個位元組，續行以空白開頭；不切斷中文字 */
+function icsFold_($line) {
+  $out = ''; $cur = '';
+  foreach (preg_split('//u', $line, -1, PREG_SPLIT_NO_EMPTY) as $ch) {
+    if (strlen($cur) + strlen($ch) > ($out === '' ? 75 : 74)) { $out .= ($out === '' ? '' : "\r\n ") . $cur; $cur = ''; }
+    $cur .= $ch;
+  }
+  return $out . ($out === '' ? '' : "\r\n ") . $cur;
+}
+/** 單一班的 iCalendar 內容（不含姓名；含前一天與 2 小時前提醒）；參數不對回 null */
+function icsText_($iso, $sh) {
+  $c = calConfig_();
+  if (!$c || !in_array($sh, ['am', 'pm'], true) || !preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', (string)$iso, $mm) || !checkdate((int)$mm[2], (int)$mm[3], (int)$mm[1])) return null;
+  $t = calShiftTimes_($iso, $sh);
+  if (!$t) return null;
+  $utc = new DateTimeZone('UTC'); $f = function ($d) use ($utc) { return $d->setTimezone($utc)->format('Ymd\THis\Z'); };
+  $label = (string)(CFG()['UI']['shifts'][$sh]['label'] ?? $sh);
+  $title = str_replace('{班別}', $label, $c['title']);
+  $url = function_exists('ssoBaseUrl_') ? ssoBaseUrl_() : '';
+  $host = parse_url($url, PHP_URL_HOST) ?: 'ucc';
+  $when = $t[0]->format('H:i');
+  $L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//UCC Shift Scheduler//ZH-TW', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VEVENT', 'UID:ucc-' . str_replace('-', '', $iso) . '-' . $sh . '@' . $host, 'DTSTAMP:' . $f(now_()),
+    'DTSTART:' . $f($t[0]), 'DTEND:' . $f($t[1]), 'SUMMARY:' . icsEsc_($title)];
+  if ($c['location'] !== '') $L[] = 'LOCATION:' . icsEsc_($c['location']);
+  if ($c['details'] !== '') $L[] = 'DESCRIPTION:' . icsEsc_($c['details']);
+  if ($url) $L[] = 'URL:' . $url;
+  foreach ([['-P1D', '明天 ' . $when . ' ' . $title], ['-PT2H', '2 小時後 ' . $title]] as $a)
+    array_push($L, 'BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' . icsEsc_($a[1]), 'TRIGGER:' . $a[0], 'END:VALARM');
+  array_push($L, 'END:VEVENT', 'END:VCALENDAR');
+  return implode("\r\n", array_map('icsFold_', $L)) . "\r\n";
 }

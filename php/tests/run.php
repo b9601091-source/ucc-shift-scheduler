@@ -48,6 +48,7 @@ function gasExport($names, $months, $fills = [], $props = []) {
     'props' => $props, 'log' => [['ts' => '2026-09-01 10:00:00', 'action' => '登入', 'name' => '王小明']]];
 }
 $NAMES = ['王小明', '陳小美', '林小華'];
+function NAMES_ALL_() { global $NAMES; return array_values(array_unique(array_merge($NAMES, CFG()['ADMIN_NAMES'], CFG()['SETUP_ROSTER']))); }
 
 /* ================= 1. 空資料庫＋SETUP_ROSTER ================= */
 echo "=== 空資料庫\n";
@@ -417,6 +418,26 @@ if ($real) {
   ok(count($isos) === count(array_unique($isos)) && !array_filter($real[0]['days'], function ($d) { return (int)$d[1] === 1 && dow_($d[0]) === 0; }), '開設表沒有重複日期、不必列週日');
 }
 $GLOBALS['UCC_OPEN_DAY_BATCHES'] = [];
+
+/* ================= 加入行事曆 ================= */
+echo "=== 加入行事曆\n";
+$K = env('2026-11-19');
+$bc = $K->apiGetBootstrap([])['cal'];
+ok(is_array($bc) && strpos($bc['title'], '{班別}') !== false && $bc['tz'] === CFG()['TZ'] && $bc['ics'] === true, 'bootstrap 帶行事曆設定', $bc);
+$K->use_();
+$pm = icsText_('2027-01-17', 'pm'); $am = icsText_('2027-01-02', 'am');
+ok(strpos($pm, "DTSTART:20270117T080000Z\r\n") !== false && strpos($pm, "DTEND:20270117T160000Z\r\n") !== false, '晚班 16:00–24:00（臺北）＝UTC 08:00–16:00', $pm);
+ok(strpos($am, "DTSTART:20270102T000000Z\r\n") !== false && strpos($am, "DTEND:20270102T080000Z\r\n") !== false, '早班 08:00–16:00（臺北）＝UTC 00:00–08:00');
+ok(substr_count($pm, 'BEGIN:VALARM') === 2 && strpos($pm, 'TRIGGER:-P1D') !== false && strpos($pm, 'TRIGGER:-PT2H') !== false, '兩個提醒：前一天、2 小時前');
+ok(strpos($pm, 'SUMMARY:' . icsEsc_(str_replace('{班別}', CFG()['UI']['shifts']['pm']['label'], $bc['title']))) !== false && strpos($pm, 'UID:ucc-20270117-pm@') !== false, '標題與 UID');
+$lines = explode("\r\n", rtrim($pm, "\r\n"));
+ok(!array_filter($lines, function ($l) { return strlen($l) > 75; }) && strpos($pm, "\n") === strpos($pm, "\r\n") + 1 && substr($pm, -2) === "\r\n" && $lines[0] === 'BEGIN:VCALENDAR' && end($lines) === 'END:VCALENDAR', '每行 ≤75 位元組、CRLF', array_map('strlen', $lines));
+$unf = str_replace("\r\n ", '', $pm);
+ok(strpos($unf, 'DESCRIPTION:' . icsEsc_($bc['details'])) !== false, '摺行後還原得回完整說明');
+ok(icsEsc_("a;b,c\\d\ne") === 'a\;b\,c\\\\d\ne', '跳脫分號逗號反斜線換行');
+ok(icsText_('2027-02-30', 'pm') === null && icsText_('2027-01-17', 'xx') === null && icsText_('20270117', 'am') === null && icsText_('2027-01-17<x>', 'am') === null, '參數不對回 null');
+foreach (NAMES_ALL_() as $n) if (strpos($pm . $am, $n) !== false) ok(false, '行事曆檔不含姓名', $n);
+ok(true, '行事曆檔不含姓名');
 
 foreach (Env::$all as $e) { foreach (glob($e->dir . '/*') as $f) @unlink($f); @rmdir($e->dir); }
 echo "通過 {$PASS}／失敗 {$FAILS}\n";

@@ -171,6 +171,16 @@
   .loginbox{max-width:400px;margin:34px auto 0}
   .loginbox h2{justify-content:flex-start;font-size:16px}
   #loginSeq,#loginPw{height:44px;width:100%;min-width:0;box-sizing:border-box}
+  .ssoOr{display:flex;align-items:center;gap:10px;margin:16px 0 10px;color:var(--sub);font-size:12px}
+  .ssoOr::before,.ssoOr::after{content:'';flex:1;height:1px;background:var(--line)}
+  .btn.sso{width:100%;height:44px;margin-top:8px;font-size:15px;display:flex;align-items:center;justify-content:center;gap:8px}
+  .btn.sso.line{background:#06C755;color:#fff;border:1px solid #06C755}
+  .btn.sso.google{background:#fff;color:#333;border:1px solid #c9ced6}
+  .btn.sso .lg{display:inline-block;width:20px;height:20px;border-radius:50%;background:#fff;color:#06C755;font-weight:800;font-size:12px;line-height:20px;text-align:center}
+  .btn.sso.google .lg{background:#fff;color:#4285f4;border:1px solid #ddd}
+  .ssorow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:13.5px}
+  .ssorow .nm{flex:1}
+  .ssorow .btn{font-size:12.5px;padding:5px 11px}
   .err{color:#b3261e;font-size:13px;margin-top:8px}
   .cl{margin:0;padding:0;list-style:none}
   .cl li{border-bottom:1px solid var(--line);padding:9px 0}
@@ -320,6 +330,25 @@
     .banner .push{margin-left:0;width:100%}
     .banner .push .btn{flex:1}
   }
+  /* 我的班 → 加入行事曆 */
+  .mycal h2 small{font-weight:400;color:var(--sub);font-size:12.5px;margin-left:6px}
+  .mycal .mlist{display:flex;flex-wrap:wrap;column-gap:28px}
+  .mycal .mrow{display:flex;align-items:center;gap:8px;flex:1 1 300px;padding:8px 0;border-top:1px solid var(--line)}
+  .mycal .when{flex:1 1 auto;min-width:0;font-size:14.5px;font-weight:700;color:var(--ink)}
+  .mycal .when small{font-weight:400;color:var(--sub);font-size:12.5px;margin-left:4px}
+  .mycal .calbtn{font:inherit;font-size:13px;border-radius:8px;padding:6px 12px;background:#fff;color:var(--brand);border:1px solid var(--brand);white-space:nowrap;cursor:pointer}
+  .calsheet{position:fixed;inset:0;background:rgba(20,28,38,.5);display:none;align-items:flex-end;justify-content:center;z-index:90}
+  .calsheet.on{display:flex}
+  .calsheet .sheet{background:#fff;border-radius:14px 14px 0 0;width:100%;max-width:480px;padding:16px 16px 22px;box-sizing:border-box}
+  .calsheet .t{font-weight:700;font-size:16px;margin-bottom:2px;color:var(--ink)}
+  .calsheet .s{color:var(--sub);font-size:13px;margin-bottom:6px}
+  .calsheet a,.calsheet button{display:block;box-sizing:border-box;width:100%;text-align:center;text-decoration:none;font:inherit;font-size:15px;border-radius:10px;padding:12px;margin-top:8px;border:1px solid var(--brand);background:#fff;color:var(--brand);cursor:pointer}
+  .calsheet .pri{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .calsheet .x{border:none;color:var(--sub)}
+  .calsheet .hint{font-size:12.5px;color:var(--sub);margin-top:10px;line-height:1.6}
+  .calsheet .hint b{color:#b3261e}
+  @media (min-width:700px){ .calsheet{align-items:center} .calsheet .sheet{border-radius:14px} }
+  @media (max-width:340px){ .card h2.calhead{gap:4px} .calright .btn{padding:0 7px;font-size:12px} }
 </style>
 
 <header>
@@ -354,6 +383,11 @@
              pattern="[0-9]*" maxlength="6" autocomplete="off" placeholder="4~6 位數字">
       <div class="err" id="loginMsg" style="display:none"></div>
       <button class="btn big" id="btnLogin" style="width:100%;margin-top:14px">登入</button>
+      <div id="ssoBox" style="display:none">
+        <div class="ssoOr"><span>或用綁定過的帳號直接登入</span></div>
+        <button type="button" class="btn sso line" id="ssoLine" style="display:none">用 LINE 登入</button>
+        <button type="button" class="btn sso google" id="ssoGoogle" style="display:none">用 Google 登入</button>
+      </div>
       <div style="font-size:12px;color:var(--sub);margin-top:10px;line-height:1.7" id="loginHelp"></div>
     </div>
   </div>
@@ -365,6 +399,7 @@
   </div>
   <div class="banner" id="banner"></div>
   <div class="meta" id="meta"></div>
+  <div class="card mycal" id="myCal" style="display:none"></div>
 
   <div class="main" id="mainGrid">
     <div class="col-cal">
@@ -486,6 +521,7 @@
                 <select id="resetName"></select>
                 <button class="btn ghost" id="btnResetPw">重設密碼</button>
                 <button class="btn ghost" id="btnPwStatus">看誰還沒改密碼</button>
+                <button class="btn ghost" id="btnSsoUnbind" title="清掉該員綁定的 LINE／Google 快速登入">解除快速登入</button>
               </div>
               <div class="hint">重設後該員要用預設密碼重新登入並自行修改。</div>
             </div></details>
@@ -550,6 +586,7 @@
   </div>
 </div>
 
+<div class="calsheet" id="calSheet"><div class="sheet" id="calSheetBody"></div></div>
 <div class="mask" id="mask"><div class="modal">
   <h3 id="mTitle">確認</h3>
   <div id="mBody"></div>
@@ -711,6 +748,57 @@ function myShifts(){
   });
   return out;
 }
+/* ===================== 我的班 → 加入行事曆（PHP 版 bootstrap 帶 cal 才顯示） ===================== */
+function calHM(sh){
+  var m=String(shHours(sh)||'').match(/(\d{1,2}):?(\d{2})\D+(\d{1,2}):?(\d{2})/);
+  return m ? [+m[1], +m[2], +m[3], +m[4]] : null;
+}
+function isoNextDay(iso){
+  var p=iso.split('-'), t=new Date(Date.UTC(+p[0], +p[1]-1, +p[2]+1));
+  return t.getUTCFullYear()+'-'+('0'+(t.getUTCMonth()+1)).slice(-2)+'-'+('0'+t.getUTCDate()).slice(-2);
+}
+function calWd(iso){ var p=iso.split('-'); return '日一二三四五六'.charAt(new Date(Date.UTC(+p[0], +p[1]-1, +p[2])).getUTCDay()); }
+function calTitle(sh){ var c=(S.boot&&S.boot.cal)||{}; return String(c.title||'{班別}').replace('{班別}', shLabel(sh)); }
+function gcalUrl(iso, sh){
+  var c=S.boot.cal, h=calHM(sh); if(!h) return '';
+  var p2=function(n){ return ('0'+n).slice(-2); }, eIso=iso, eh=h[2];
+  if(eh>=24){ eh-=24; eIso=isoNextDay(iso); }
+  var st=iso.replace(/-/g,'')+'T'+p2(h[0])+p2(h[1])+'00', en=eIso.replace(/-/g,'')+'T'+p2(eh)+p2(h[3])+'00';
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent(calTitle(sh))+
+    '&dates='+st+'/'+en+'&ctz='+encodeURIComponent(c.tz||'Asia/Taipei')+
+    (c.location?'&location='+encodeURIComponent(c.location):'')+(c.details?'&details='+encodeURIComponent(c.details):'');
+}
+function renderMyCal(mine){
+  var box=$('myCal'); if(!box) return;
+  var c=S.boot && S.boot.cal, today=(S.data&&S.data.today)||'';
+  var list=(c && S.me && !S.readOnly) ? mine.filter(function(x){ return !today || x.iso>=today; }) : [];
+  if(!list.length){ box.style.display='none'; box.innerHTML=''; return; }
+  box.style.display='';
+  box.innerHTML='<h2>📅 我的班<small>可加到自己的手機行事曆並設定提醒</small></h2><div class="mlist">'+
+    list.map(function(x){
+      return '<div class="mrow"><div class="when">'+x.iso.substring(5).replace('-','/')+'（'+calWd(x.iso)+'）'+shLabel(x.shift)+
+        '<small>'+shHours(x.shift)+'</small></div><button class="calbtn" data-cal="'+x.iso+'|'+x.shift+'">📅 加入行事曆</button></div>';
+    }).join('')+'</div>';
+}
+function openCalSheet(iso, sh){
+  var c=S.boot.cal, inLine=/\bLine\//i.test(navigator.userAgent||'');
+  $('calSheetBody').innerHTML='<div class="t">加入行事曆</div>'+
+    '<div class="s">'+iso.substring(5).replace('-','/')+'（'+calWd(iso)+'）'+shLabel(sh)+' '+shHours(sh)+(c.location?'　'+c.location:'')+'</div>'+
+    '<a class="pri" id="calG" href="'+gcalUrl(iso,sh)+'" target="_blank" rel="noopener">Google 日曆</a>'+
+    '<a id="calI" href="api.php?ics='+iso+'&amp;s='+sh+'">iPhone／其他行事曆（含前一天提醒）</a>'+
+    '<button class="x" id="calX" type="button">取消</button>'+
+    '<div class="hint">Google 日曆用你自己的預設提醒（原本是 30 分鐘前），可在 Google 日曆的設定改成前 1 天。'+
+    'iPhone 會在前一天與 2 小時前各提醒一次。之後若取消或換班，請記得自己刪掉這個行程。'+
+    (inLine?'<br><b>你現在是在 LINE 裡開啟，按了沒反應的話，請點右上角選單改用瀏覽器（Safari／Chrome）開啟再按一次。</b>':'')+'</div>';
+  $('calSheet').classList.add('on');
+}
+function closeCalSheet(){ $('calSheet').classList.remove('on'); }
+document.addEventListener('click', function(e){
+  var t=e.target, b=t && t.closest ? t.closest('[data-cal]') : null;
+  if(b){ var v=b.getAttribute('data-cal').split('|'); openCalSheet(v[0], v[1]); return; }
+  if(t && (t.id==='calSheet' || t.id==='calX')){ closeCalSheet(); return; }
+  if(t && t.closest && t.closest('#calG,#calI')) setTimeout(closeCalSheet, 300);
+});
 function turnOf(){
   var t=null;
   S.data.order.forEach(function(o){ if(!t && !o.done) t=o; });
@@ -864,6 +952,7 @@ function render(){
     (S.me? '<span>我本月 <b>'+mine.length+'</b> 班</span>':'');
   // 橫幅或統計列收起來時，班表別貼著頁首（要等 meta 決定完才判斷）
   $('mainGrid').classList.toggle('topgap', !h || hideMeta);
+  renderMyCal(mine);
 
   /* ---- 注意事項 ---- */
   if(d.notes){ $('notesCard').style.display=''; $('notes').textContent=d.notes; }
@@ -992,9 +1081,42 @@ function openChangePw(){
     '<label class="lb">目前密碼</label><input type="password" id="pwOld" style="width:100%"'+PWATTR+'>'+
     '<label class="lb">新密碼（4~6 位數字）</label><input type="password" id="pwNew" style="width:100%"'+PWATTR+'>'+
     '<label class="lb">再輸入一次</label><input type="password" id="pwNew2" style="width:100%"'+PWATTR+'>'+
-    '<div class="err" id="pwMsg" style="display:none"></div>',
+    '<div class="err" id="pwMsg" style="display:none"></div>'+
+    '<div id="ssoSet" style="margin-top:14px"></div>',
     '確定修改', pwSubmit);
+  renderSsoSettings();
 }
+/* 設定視窗裡的「快速登入」：綁定／解除 LINE、Google（後端沒開通就不顯示） */
+function renderSsoSettings(){
+  var box=$('ssoSet'); if(!box) return;
+  if(!S.boot || !S.boot.sso || !S.boot.sso.length){ box.innerHTML=''; return; }
+  box.innerHTML='<div class="lb" style="margin-bottom:4px">快速登入</div><div style="font-size:12.5px;color:var(--sub)">載入中…</div>';
+  api('ssoList', {token:S.token}).then(function(r){
+    if(!r || !r.ok){ box.innerHTML=''; return; }
+    if(!r.allowed){ box.innerHTML='<div class="lb" style="margin-bottom:4px">快速登入</div><div style="font-size:12.5px;color:var(--sub)">超級管理者帳號只能用密碼登入。</div>'; return; }
+    var names={line:'LINE', google:'Google'};
+    box.innerHTML='<div class="lb" style="margin-bottom:4px">快速登入</div>'+r.providers.map(function(p){
+      var b=null; r.bound.forEach(function(x){ if(x.provider===p) b=x; });
+      return '<div class="ssorow"><span class="nm"><b>'+names[p]+'</b>'+(b?'　已綁定'+(b.label?'（'+b.label+'）':''):'　未綁定')+'</span>'+
+        (b ? '<button class="btn ghost" data-sso-unbind="'+p+'">解除</button>' : '<button class="btn" data-sso-bind="'+p+'">綁定</button>')+'</div>';
+    }).join('')+'<div style="font-size:12px;color:var(--sub);margin-top:6px">綁定後，登入頁按「用 '+r.providers.map(function(p){return names[p];}).join('／')+' 登入」就不必輸入密碼；綁定的 LINE 或 Google 帳號只能對應一位藥師。</div>';
+  }).catch(function(){ box.innerHTML=''; });
+}
+document.addEventListener('click', function(e){
+  var t=e.target.closest && e.target.closest('[data-sso-bind],[data-sso-unbind]'); if(!t) return;
+  if(t.hasAttribute('data-sso-bind')){
+    busy(true);
+    api('ssoBindTicket', {token:S.token, provider:t.getAttribute('data-sso-bind')}).then(function(r){
+      busy(false); if(!r||!r.ok){ toast(r&&r.msg?r.msg:'無法開始綁定'); return; }
+      location.href=r.url;
+    }).catch(function(err){ busy(false); toast('連線失敗：'+(err&&err.message?err.message:err)); });
+  } else {
+    busy(true);
+    api('ssoUnbind', {token:S.token, provider:t.getAttribute('data-sso-unbind')}).then(function(r){
+      busy(false); toast(r&&r.msg?r.msg:'完成'); renderSsoSettings();
+    }).catch(function(err){ busy(false); toast('連線失敗：'+(err&&err.message?err.message:err)); });
+  }
+});
 function pwSubmit(){
   function err(m){ $('pwMsg').textContent=m; $('pwMsg').style.display=''; }
   var o=$('pwOld').value, a=$('pwNew').value, b=$('pwNew2').value;
@@ -1327,6 +1449,8 @@ $('mOk').onclick=function(){
 };
 $('selMonth').onchange=function(){ loadMonth(this.value); };
 $('btnLogin').onclick=doLogin;
+$('ssoLine').onclick=function(){ location.href='sso.php?start=line'; };
+$('ssoGoogle').onclick=function(){ location.href='sso.php?start=google'; };
 $('loginPw').onkeydown=function(e){ if(e.key==='Enter'||e.keyCode===13){ this.blur(); doLogin(); } };
 $('loginPw').onblur=function(){ setTimeout(maybeAutoLogin, 60); };
 $('loginPw').oninput=function(){ if(this.value!==lastFailPw) $('loginMsg').style.display='none'; };
@@ -1340,12 +1464,19 @@ $('btnResetPw').onclick=function(){
       api('adminResetPw', {token:S.token, name:n}).then(function(r){
         toast(r&&r.msg?r.msg:'完成'); }); });
 };
+$('btnSsoUnbind').onclick=function(){
+  var n=$('resetName').value;
+  modal('解除快速登入', '<p>清掉「'+n+'」綁定的 LINE／Google 快速登入；本人之後要用密碼登入再重新綁定。</p>', '確定解除', function(){
+    api('adminSsoUnbind', {token:S.token, name:n}).then(function(r){ toast(r&&r.msg?r.msg:'完成'); }); });
+};
 $('btnPwStatus').onclick=function(){
   api('adminPwStatus', {token:S.token}).then(function(r){
     if(!r||!r.ok){ toast(r&&r.msg?r.msg:'查詢失敗'); return; }
     var no=r.rows.filter(function(x){return x.isDefault;}).map(function(x){return x.name;});
     var lk=r.rows.filter(function(x){return x.lockedMin>0;})
                  .map(function(x){return x.name+'（剩 '+x.lockedMin+' 分）';});
+    var ss=r.rows.filter(function(x){return x.sso&&x.sso.length;})
+                 .map(function(x){return x.name+'（'+x.sso.map(function(p){return p==='line'?'LINE':'Google';}).join('、')+'）';});
     modal('密碼狀態',
       '<p>共 '+r.rows.length+' 人，其中 <b>'+no.length+'</b> 人還在用預設密碼：</p>'+
       '<p style="color:#8c1d18">'+(no.join('、')||'（沒有，全部都改過了）')+'</p>'+
@@ -1353,7 +1484,8 @@ $('btnPwStatus').onclick=function(){
         ? '<p style="margin-top:12px">因連續輸錯密碼而<b>登入鎖定中</b>：</p>'+
           '<p style="color:#8c1d18">'+lk.join('、')+'</p>'+
           '<p style="font-size:13px;color:var(--sub)">替他重設密碼會一併解鎖，不必等時間到。</p>'
-        : '<p style="margin-top:12px;font-size:13px;color:var(--sub)">目前沒有人被登入鎖定。</p>'),
+        : '<p style="margin-top:12px;font-size:13px;color:var(--sub)">目前沒有人被登入鎖定。</p>')+
+      (ss.length ? '<p style="margin-top:12px">已綁定快速登入：</p><p style="font-size:13px">'+ss.join('、')+'</p>' : ''),
       '關閉', null);
   });
 };
@@ -1528,6 +1660,29 @@ function syncRankOpen(){
   setTimeout(syncRankOpen, 1200);
 })();
 
+/* 快速登入回來：#sso_tok=… 是登入成功的憑證（讀完立刻從網址拿掉）；?sso=… 是綁定／取消／錯誤的結果 */
+function readSsoReturn(){
+  var out={};
+  var m=(location.hash||'').match(/[#&]sso_tok=([^&]+)/);
+  if(m){ try{ localStorage.setItem('ucc_tok', decodeURIComponent(m[1])); }catch(e){} out.loggedIn=true; }
+  var q=location.search||'', qm=q.match(/[?&]sso=([a-z]+)/);
+  if(qm){ out.kind=qm[1]; var pm=q.match(/[?&]p=([a-z]+)/); out.p=pm?pm[1]:''; var em=q.match(/[?&]m=([a-z]+)/); out.m=em?em[1]:''; }
+  if(m||qm){ try{ history.replaceState(null, '', location.pathname); }catch(e){} }
+  return out;
+}
+var SSO_RET = readSsoReturn();
+function ssoReturnMessage(){
+  var names={line:'LINE', google:'Google'}, n=names[SSO_RET.p]||'快速';
+  if(SSO_RET.kind==='bound'){ toast('已綁定 '+n+' 登入，下次登入頁直接按「用 '+n+' 登入」'); return null; }
+  if(SSO_RET.kind==='unbound') return '這個 '+n+' 帳號還沒綁定：請先用代號與密碼登入，再到右上角「設定」綁定';
+  if(SSO_RET.kind==='cancel') return '已取消 '+n+' 登入';
+  if(SSO_RET.kind==='error'){
+    var E={expired:'連結已過期，請重新操作', off:'這個登入方式尚未開通', verify:'身分驗證失敗，請再試一次', denied:'這個帳號不能使用快速登入',
+           taken:'這個 '+n+' 帳號已綁在另一位藥師名下', locked:'密碼錯誤次數過多，帳號鎖定中，請稍後再試', server:'系統發生錯誤，請稍後再試'};
+    return E[SSO_RET.m] || '快速登入失敗';
+  }
+  return null;
+}
 function boot(){
   $('lastUpd').textContent = CHANGELOG.length ? CHANGELOG[0].d : '';
   try{ S.token = localStorage.getItem('ucc_tok')||''; }catch(e){}
@@ -1559,6 +1714,13 @@ function boot(){
     if(!want || !b.months.some(function(m){ return m.name===want; })) want = b.months.length ? b.months[0].name : '';
     S.want = want;
     $('selMonth').value = want;
+    // 登入頁的快速登入按鈕：後端開通哪幾家就顯示哪幾顆
+    var sso = b.sso || [];
+    $('ssoBox').style.display = sso.length ? '' : 'none';
+    $('ssoLine').style.display = sso.indexOf('line')>=0 ? '' : 'none';
+    $('ssoGoogle').style.display = sso.indexOf('google')>=0 ? '' : 'none';
+    var ssoMsg = ssoReturnMessage();
+    if(ssoMsg){ showLogin(ssoMsg); SSO_RET={}; return; }
     if(S.token){
       $('app').style.display=''; $('picker').style.display='';
       loadMonth(want);
